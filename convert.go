@@ -209,81 +209,82 @@ func convertCFNumberToFloat64(cfNumber C.CFNumberRef) float64 {
 
 // Converts the CFNumberRef to the most appropriate numeric type
 func convertCFNumberToInterface(cfNumber C.CFNumberRef) interface{} {
-	var value reflect.Value
-	var ptr unsafe.Pointer
 	typ := C.CFNumberGetType(cfNumber)
 	switch typ {
 	case C.kCFNumberSInt8Type:
 		var sint C.SInt8
-		ptr = unsafe.Pointer(&sint)
-		value = reflect.ValueOf(int8(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&sint))
+		return int8(sint)
 	case C.kCFNumberSInt16Type:
 		var sint C.SInt16
-		ptr = unsafe.Pointer(&sint)
-		value = reflect.ValueOf(int16(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&sint))
+		return int16(sint)
 	case C.kCFNumberSInt32Type:
 		var sint C.SInt32
-		ptr = unsafe.Pointer(&sint)
-		value = reflect.ValueOf(int32(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&sint))
+		return int32(sint)
 	case C.kCFNumberSInt64Type:
 		var sint C.SInt64
-		ptr = unsafe.Pointer(&sint)
-		value = reflect.ValueOf(int64(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&sint))
+		return int64(sint)
 	case C.kCFNumberFloat32Type:
 		var float C.Float32
-		ptr = unsafe.Pointer(&float)
-		value = reflect.ValueOf(float32(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&float))
+		return float32(float)
 	case C.kCFNumberFloat64Type:
 		var float C.Float64
-		ptr = unsafe.Pointer(&float)
-		value = reflect.ValueOf(float64(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&float))
+		return float64(float)
 	case C.kCFNumberCharType:
 		var char C.char
-		ptr = unsafe.Pointer(&char)
-		value = reflect.ValueOf(byte(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&char))
+		return byte(char)
 	case C.kCFNumberShortType:
 		var short C.short
-		ptr = unsafe.Pointer(&short)
-		value = reflect.ValueOf(int16(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&short))
+		return int16(short)
 	case C.kCFNumberIntType:
 		var i C.int
-		ptr = unsafe.Pointer(&i)
-		value = reflect.ValueOf(int(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&i))
+		return int32(i)
 	case C.kCFNumberLongType:
 		var long C.long
-		ptr = unsafe.Pointer(&long)
-		value = reflect.ValueOf(int64(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&long))
+		return int(long)
 	case C.kCFNumberLongLongType:
 		// this is the only type that may actually overflow us
 		var longlong C.longlong
-		ptr = unsafe.Pointer(&longlong)
-		value = reflect.ValueOf(int64(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&longlong))
+		return int64(longlong)
 	case C.kCFNumberFloatType:
 		var float C.float
-		ptr = unsafe.Pointer(&float)
-		value = reflect.ValueOf(float32(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&float))
+		return float32(float)
 	case C.kCFNumberDoubleType:
 		var double C.double
-		ptr = unsafe.Pointer(&double)
-		value = reflect.ValueOf(float64(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&double))
+		return float64(double)
 	case C.kCFNumberCFIndexType:
 		// CFIndex is a long
-		var cfIndex C.CFIndex
-		ptr = unsafe.Pointer(&cfIndex)
-		value = reflect.ValueOf(int64(0))
+		var index C.CFIndex
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&index))
+		return int(index)
 	case C.kCFNumberNSIntegerType:
 		// We don't have a definition of NSInteger, but we know it's either an int or a long
 		var nsInt C.long
-		ptr = unsafe.Pointer(&nsInt)
-		value = reflect.ValueOf(int64(0))
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&nsInt))
+		return int(nsInt)
 	case C.kCFNumberCGFloatType:
 		// CGFloat is a float or double
-		var cgFloat C.CGFloat
-		ptr = unsafe.Pointer(&cgFloat)
-		value = reflect.ValueOf(float64(0))
+		var float C.CGFloat
+		C.CFNumberGetValue(cfNumber, typ, unsafe.Pointer(&float))
+		if unsafe.Sizeof(float) == 8 {
+			return float64(float)
+		} else {
+			return float32(float)
+		}
 	}
-	C.CFNumberGetValue(cfNumber, typ, ptr)
-	return value.Interface()
+	panic("plist: unknown CFNumber type")
 }
 
 // ===== CFArray =====
