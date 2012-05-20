@@ -70,7 +70,11 @@ func convertCFTypeToValue(cfType C.CFTypeRef) (interface{}, error) {
 
 // ===== CFData =====
 func convertBytesToCFData(data []byte) C.CFDataRef {
-	return C.CFDataCreate(nil, (*C.UInt8)(&data[0]), C.CFIndex(len(data)))
+	var ptr *C.UInt8
+	if len(data) > 0 {
+		ptr = (*C.UInt8)((&data[0]))
+	}
+	return C.CFDataCreate(nil, ptr, C.CFIndex(len(data)))
 }
 
 func convertCFDataToBytes(cfData C.CFDataRef) []byte {
