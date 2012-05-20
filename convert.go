@@ -156,10 +156,12 @@ func convertCFDateToTime(cfDate C.CFDateRef) time.Time {
 
 // ===== CFBoolean =====
 func convertBoolToCFBoolean(b bool) C.CFBooleanRef {
+	// I don't think the CFBoolean constants have retain counts,
+	// but just in case lets call CFRetain on them
 	if b {
-		return C.kCFBooleanTrue
+		return C.CFBooleanRef(C.CFRetain(C.CFTypeRef(C.kCFBooleanTrue)))
 	}
-	return C.kCFBooleanFalse
+	return C.CFBooleanRef(C.CFRetain(C.CFTypeRef(C.kCFBooleanFalse)))
 }
 
 func convertCFBooleanToBool(cfBoolean C.CFBooleanRef) bool {

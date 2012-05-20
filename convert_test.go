@@ -81,3 +81,18 @@ func TestCFNumber_Float64(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestCFBoolean(t *testing.T) {
+	f := func(b bool) bool { return b }
+	g := func(b bool) bool {
+		cfBool := convertBoolToCFBoolean(b)
+		if cfBool == nil {
+			t.Fatal("CFBooleanRef is NULL (%#v)", b)
+		}
+		defer cfRelease(cfTypeRef(cfBool))
+		return convertCFBooleanToBool(cfBool)
+	}
+	if err := quick.CheckEqual(f, g, nil); err != nil {
+		t.Error(err)
+	}
+}
