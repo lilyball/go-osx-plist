@@ -10,7 +10,7 @@ func TestCFData(t *testing.T) {
 	g := func(data []byte) []byte {
 		cfData := convertBytesToCFData(data)
 		if cfData == nil {
-			t.Fatal("CFDataRef is NULL")
+			t.Fatal("CFDataRef is NULL (%#v)", data)
 		}
 		defer cfRelease(cfTypeRef(cfData))
 		return convertCFDataToBytes(cfData)
@@ -31,6 +31,51 @@ func TestCFString(t *testing.T) {
 		}
 		defer cfRelease(cfTypeRef(cfStr))
 		return convertCFStringToString(cfStr)
+	}
+	if err := quick.CheckEqual(f, g, nil); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestCFNumber_Int64(t *testing.T) {
+	f := func(i int64) int64 { return i }
+	g := func(i int64) int64 {
+		cfNum := convertInt64ToCFNumber(i)
+		if cfNum == nil {
+			t.Fatal("CFNumberRef is NULL (%#v)", i)
+		}
+		defer cfRelease(cfTypeRef(cfNum))
+		return convertCFNumberToInt64(cfNum)
+	}
+	if err := quick.CheckEqual(f, g, nil); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestCFNumber_UInt32(t *testing.T) {
+	f := func(i uint32) uint32 { return i }
+	g := func(i uint32) uint32 {
+		cfNum := convertUInt32ToCFNumber(i)
+		if cfNum == nil {
+			t.Fatal("CFNumberRef is NULL (%#v)", i)
+		}
+		defer cfRelease(cfTypeRef(cfNum))
+		return convertCFNumberToUInt32(cfNum)
+	}
+	if err := quick.CheckEqual(f, g, nil); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestCFNumber_Float64(t *testing.T) {
+	f := func(f float64) float64 { return f }
+	g := func(f float64) float64 {
+		cfNum := convertFloat64ToCFNumber(f)
+		if cfNum == nil {
+			t.Fatal("CFNumberRef is NULL (%#v)", f)
+		}
+		defer cfRelease(cfTypeRef(cfNum))
+		return convertCFNumberToFloat64(cfNum)
 	}
 	if err := quick.CheckEqual(f, g, nil); err != nil {
 		t.Error(err)
