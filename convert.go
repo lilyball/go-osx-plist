@@ -8,6 +8,11 @@ import "reflect"
 import "time"
 import "unsafe"
 
+type cfTypeRef C.CFTypeRef
+func cfRelease(cfObj cfTypeRef) {
+	C.CFRelease(C.CFTypeRef(cfObj))
+}
+
 func convertValueToCFType(obj interface{}) (C.CFTypeRef, error) {
 	value := reflect.ValueOf(obj)
 	switch value.Kind() {
@@ -271,7 +276,7 @@ func convertSliceToCFArray(slice reflect.Value) (C.CFArrayRef, error) {
 	defer func() {
 		for _, cfObj := range plists {
 			if cfObj != nil {
-				C.CFRelease(cfObj)
+				cfRelease(cfTypeRef(cfObj))
 			}
 		}
 	}()
@@ -316,12 +321,12 @@ func convertMapToCFDictionary(m reflect.Value) (C.CFDictionaryRef, error) {
 	defer func() {
 		for _, cfKey := range keys {
 			if cfKey != nil {
-				C.CFRelease(cfKey)
+				cfRelease(cfTypeRef(cfKey))
 			}
 		}
 		for _, cfVal := range values {
 			if cfVal != nil {
-				C.CFRelease(cfVal)
+				cfRelease(cfTypeRef(cfVal))
 			}
 		}
 	}()
