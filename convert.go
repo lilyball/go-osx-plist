@@ -6,7 +6,6 @@ import "C"
 
 import (
 	"errors"
-	"math"
 	"reflect"
 	"time"
 	"unsafe"
@@ -141,7 +140,9 @@ func convertCFStringToString(cfStr C.CFStringRef) string {
 
 // ===== CFDate =====
 func convertTimeToCFDate(t time.Time) C.CFDateRef {
-	nano := C.double(t.UnixNano()) / C.double(time.Second)
+	// truncate to milliseconds, to get a more predictable conversion
+	ms := int64(time.Duration(t.UnixNano()) / time.Millisecond * time.Millisecond)
+	nano := C.double(ms) / C.double(time.Second)
 	nano -= C.kCFAbsoluteTimeIntervalSince1970
 	return C.CFDateCreate(nil, C.CFAbsoluteTime(nano))
 }
@@ -149,9 +150,11 @@ func convertTimeToCFDate(t time.Time) C.CFDateRef {
 func convertCFDateToTime(cfDate C.CFDateRef) time.Time {
 	nano := C.double(C.CFDateGetAbsoluteTime(cfDate))
 	nano += C.kCFAbsoluteTimeIntervalSince1970
-	sec := math.Trunc(float64(nano))
-	nsec := (float64(nano) - sec) * float64(time.Second)
-	return time.Unix(int64(sec), int64(nsec))
+	// pull out milliseconds, to get a more predictable conversion
+	ms := int64(float64(C.round(nano * 1000)))
+	sec := ms / 1000
+	nsec := (ms % 1000) * int64(time.Millisecond)
+	return time.Unix(sec, nsec)
 }
 
 // ===== CFBoolean =====
