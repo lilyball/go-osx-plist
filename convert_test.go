@@ -3,6 +3,7 @@ package plist
 import (
 	"testing"
 	"testing/quick"
+	"time"
 )
 
 func TestCFData(t *testing.T) {
@@ -91,6 +92,27 @@ func TestCFBoolean(t *testing.T) {
 		}
 		defer cfRelease(cfTypeRef(cfBool))
 		return convertCFBooleanToBool(cfBool)
+	}
+	if err := quick.CheckEqual(f, g, nil); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestCFDate(t *testing.T) {
+	// We know the CFDate conversion explicitly truncates to milliseconds
+	// because CFDates use floating point for representation.
+	round := func(nano int64) int64 {
+		return int64(time.Duration(nano) / time.Millisecond * time.Millisecond)
+	}
+	f := func(nano int64) time.Time { return time.Unix(0, round(nano)) }
+	g := func(nano int64) time.Time {
+		ti := time.Unix(0, round(nano))
+		cfDate := convertTimeToCFDate(ti)
+		if cfDate == nil {
+			t.Fatal("CFDateRef is NULL (%#v)", ti)
+		}
+		defer cfRelease(cfTypeRef(cfDate))
+		return convertCFDateToTime(cfDate)
 	}
 	if err := quick.CheckEqual(f, g, nil); err != nil {
 		t.Error(err)
