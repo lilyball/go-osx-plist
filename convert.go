@@ -3,12 +3,17 @@ package plist
 // #import <CoreFoundation/CoreFoundation.h>
 // #import <CoreGraphics/CGBase.h> // for CGFloat
 import "C"
-import "math"
-import "reflect"
-import "time"
-import "unsafe"
+
+import (
+	"errors"
+	"math"
+	"reflect"
+	"time"
+	"unsafe"
+)
 
 type cfTypeRef C.CFTypeRef
+
 func cfRelease(cfObj cfTypeRef) {
 	C.CFRelease(C.CFTypeRef(cfObj))
 }
@@ -25,7 +30,11 @@ func convertValueToCFType(obj interface{}) (C.CFTypeRef, error) {
 	case reflect.Float32, reflect.Float64:
 		return C.CFTypeRef(convertFloat64ToCFNumber(value.Float())), nil
 	case reflect.String:
-		return C.CFTypeRef(convertStringToCFString(value.String())), nil
+		cfStr := convertStringToCFString(value.String())
+		if cfStr == nil {
+			return nil, errors.New("plist: could not convert string to CFStringRef")
+		}
+		return C.CFTypeRef(cfStr), nil
 	case reflect.Struct:
 		// only struct type we support is time.Time
 		if value.Type() == reflect.TypeOf(time.Time{}) {
@@ -88,6 +97,7 @@ func convertCFDataToBytes(cfData C.CFDataRef) []byte {
 }
 
 // ===== CFString =====
+// convertStringToCFString may return nil if the input string is not a valid UTF-8 string
 func convertStringToCFString(str string) C.CFStringRef {
 	// go through unsafe to get the string bytes directly without the copy
 	header := (*reflect.StringHeader)(unsafe.Pointer(&str))
@@ -102,22 +112,26 @@ func convertCFStringToString(cfStr C.CFStringRef) string {
 	}
 	// quick path doesn't work, so copy the bytes out to a buffer
 	length := C.CFStringGetLength(cfStr)
+	if length == 0 {
+		// short-cut for empty strings
+		return ""
+	}
 	cfRange := C.CFRange{0, length}
 	enc := C.CFStringEncoding(C.kCFStringEncodingUTF8)
 	// first find the buffer size necessary
 	var usedBufLen C.CFIndex
 	if C.CFStringGetBytes(cfStr, cfRange, enc, 0, C.false, nil, 0, &usedBufLen) > 0 {
-		bytes := make([]byte, 0, usedBufLen)
+		bytes := make([]byte, usedBufLen)
 		buffer := (*C.UInt8)(unsafe.Pointer(&bytes[0]))
 		if C.CFStringGetBytes(cfStr, cfRange, enc, 0, C.false, buffer, usedBufLen, nil) > 0 {
 			// bytes is now filled up
 			// convert it to a string
 			header := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
-			strHeader := reflect.StringHeader{
+			strHeader := &reflect.StringHeader{
 				Data: header.Data,
-				Len:  int(usedBufLen),
+				Len:  header.Len,
 			}
-			return *(*string)(unsafe.Pointer(&strHeader))
+			return *(*string)(unsafe.Pointer(strHeader))
 		}
 	}
 
@@ -333,7 +347,11 @@ func convertMapToCFDictionary(m reflect.Value) (C.CFDictionaryRef, error) {
 	// create the keys and values slices
 	for i, keyVal := range mapKeys {
 		// keyVal is a Value representing a string
-		keys[i] = C.CFTypeRef(convertStringToCFString(keyVal.String()))
+		cfStr := convertStringToCFString(keyVal.String())
+		if cfStr == nil {
+			return nil, errors.New("plist: could not convert string to CFStringRef")
+		}
+		keys[i] = C.CFTypeRef(cfStr)
 		cfObj, err := convertValueToCFType(m.MapIndex(keyVal).Interface())
 		if err != nil {
 			return nil, err
