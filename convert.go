@@ -290,6 +290,10 @@ func convertCFNumberToInterface(cfNumber C.CFNumberRef) interface{} {
 // ===== CFArray =====
 // use reflect.Value to support slices of any type
 func convertSliceToCFArray(slice reflect.Value) (C.CFArrayRef, error) {
+	if slice.Len() == 0 {
+		// short-circuit 0, so we can assume plists[0] is valid later
+		return C.CFArrayCreate(nil, nil, 0, nil), nil
+	}
 	// assume slice is a slice/array, because our caller already checked
 	plists := make([]C.CFTypeRef, slice.Len())
 	// defer the release
@@ -302,7 +306,7 @@ func convertSliceToCFArray(slice reflect.Value) (C.CFArrayRef, error) {
 	}()
 	// convert the slice
 	for i := 0; i < slice.Len(); i++ {
-		cfType, err := convertValueToCFType(slice.Index(i))
+		cfType, err := convertValueToCFType(slice.Index(i).Interface())
 		if err != nil {
 			return nil, err
 		}
@@ -316,6 +320,10 @@ func convertSliceToCFArray(slice reflect.Value) (C.CFArrayRef, error) {
 
 func convertCFArrayToSlice(cfArray C.CFArrayRef) ([]interface{}, error) {
 	count := C.CFArrayGetCount(cfArray)
+	if count == 0 {
+		// short-circuit zero so we can assume cfTypes[0] is valid later
+		return []interface{}{}, nil
+	}
 	cfTypes := make([]C.CFTypeRef, int(count))
 	cfRange := C.CFRange{0, count}
 	C.CFArrayGetValues(cfArray, cfRange, (*unsafe.Pointer)(&cfTypes[0]))
