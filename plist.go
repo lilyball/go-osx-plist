@@ -96,11 +96,11 @@ func (e *UnknownCFTypeError) Error() string {
 	return "plist: unknown CFTypeID " + strconv.Itoa(e.CFTypeID)
 }
 
-type UnexpectedKeyTypeError struct {
+type UnsupportedKeyTypeError struct {
 	CFTypeID int
 }
 
-func (e *UnexpectedKeyTypeError) Error() string {
+func (e *UnsupportedKeyTypeError) Error() string {
 	return "plist: unexpected dictionary key CFTypeID " + strconv.Itoa(e.CFTypeID)
 }
 

@@ -393,7 +393,7 @@ func convertCFDictionaryToMap(cfDict C.CFDictionaryRef) (map[string]interface{},
 		cfKey := cfKeys[i]
 		typeId := C.CFGetTypeID(cfKey)
 		if typeId != C.CFStringGetTypeID() {
-			return nil, &UnexpectedKeyTypeError{int(typeId)}
+			return nil, &UnsupportedKeyTypeError{int(typeId)}
 		}
 		key := convertCFStringToString(C.CFStringRef(cfKey))
 		val, err := convertCFTypeToValue(cfVals[i])

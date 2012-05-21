@@ -56,17 +56,17 @@ func NewCFError(c C.CFErrorRef) *CFError
 
 func (e *CFError) Error() string
 
-type UnexpectedKeyTypeError struct {
-    CFTypeID int
-}
-
-func (e *UnexpectedKeyTypeError) Error() string
-
 type UnknownCFTypeError struct {
     CFTypeID int
 }
 
 func (e *UnknownCFTypeError) Error() string
+
+type UnsupportedKeyTypeError struct {
+    CFTypeID int
+}
+
+func (e *UnsupportedKeyTypeError) Error() string
 
 type UnsupportedTypeError struct {
     Type reflect.Type
