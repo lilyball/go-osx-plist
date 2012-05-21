@@ -24,8 +24,13 @@ func convertValueToCFType(obj interface{}) (C.CFTypeRef, error) {
 		return C.CFTypeRef(convertBoolToCFBoolean(value.Bool())), nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return C.CFTypeRef(convertInt64ToCFNumber(value.Int())), nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32:
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32:
 		return C.CFTypeRef(convertUInt32ToCFNumber(uint32(value.Uint()))), nil
+	case reflect.Uint, reflect.Uintptr:
+		// don't try and convert if uint/uintptr is 64-bits
+		if value.Type().Bits() < 64 {
+			return C.CFTypeRef(convertUInt32ToCFNumber(uint32(value.Uint()))), nil
+		}
 	case reflect.Float32, reflect.Float64:
 		return C.CFTypeRef(convertFloat64ToCFNumber(value.Float())), nil
 	case reflect.String:
