@@ -37,6 +37,7 @@ const (
 // CFPropertyListCreateWithData decodes the given data into a property list object.
 func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, err error) {
 	cfData := convertBytesToCFData(data)
+	defer C.CFRelease(C.CFTypeRef(cfData))
 	var cfFormat C.CFPropertyListFormat
 	var cfError C.CFErrorRef
 	cfObj := C.CFPropertyListCreateWithData(nil, cfData, 0, &cfFormat, &cfError)
@@ -63,6 +64,7 @@ func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer C.CFRelease(cfObj)
 	var cfError C.CFErrorRef
 	cfData := C.CFPropertyListCreateData(nil, C.CFPropertyListRef(cfObj), C.CFPropertyListFormat(format), 0, &cfError)
 	if cfData == nil {
@@ -73,7 +75,7 @@ func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error) {
 		}
 		return nil, errors.New("plist: unknown error in CFPropertyListCreateData")
 	}
-	defer C.CFRelease(cfObj)
+	defer C.CFRelease(C.CFTypeRef(cfData))
 	data := convertCFDataToBytes(cfData)
 	return data, nil
 }
