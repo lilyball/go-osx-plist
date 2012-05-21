@@ -223,6 +223,15 @@ func standardize(obj interface{}) (newObj interface{}, changed bool) {
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
 		return val.Int(), true
+	case reflect.Struct:
+		// We truncate to millisecond precision in the conversion, but we can't even rely on that
+		// for testing purposes because far-future timestamps lose even that much.
+		// Truncate times to the nearest second
+		if typ == reflect.TypeOf(time.Time{}) {
+			t := obj.(time.Time)
+			newT := time.Unix(t.Unix(), 0)
+			return newT, !t.Equal(newT)
+		}
 	case reflect.Slice:
 		canChange := typ.Elem().Kind() == reflect.Interface
 		if canChange {
