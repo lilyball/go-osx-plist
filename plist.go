@@ -2,13 +2,13 @@
 // objects using CoreFoundation.
 //
 // Property list objects are any object of type:
-// - string
-// - []byte
-// - time.Time
-// - bool
-// - numeric type
-// - a slice of any property list object
-// - a map from a string to any property list object
+//   - string
+//   - []byte
+//   - time.Time
+//   - bool
+//   - numeric type (except for 64-bit uint types)
+//   - a slice of any property list object
+//   - a map from a string to any property list object
 //
 // Note, a []byte (or []uint8) slice is always converted to a CFDataRef,
 // but a slice of any other type is converted to a CFArrayRef
