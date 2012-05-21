@@ -1,0 +1,77 @@
+PACKAGE
+
+package plist
+    import "github.com/kballard/go-osx-plist"
+
+    Package plist implements serializing and deserializing of property list
+    objects using CoreFoundation.
+
+    Property list objects are any object of type:
+
+	- string
+	- []byte
+	- time.Time
+	- bool
+	- numeric type (except for 64-bit uint types)
+	- a slice of any property list object
+	- a map from a string to any property list object
+
+    Note, a []byte (or []uint8) slice is always converted to a CFDataRef,
+    but a slice of any other type is converted to a CFArrayRef
+
+CONSTANTS
+
+const (
+    // OpenStep format (use of this format is discouraged)
+    CFPropertyListOpenStepFormat = 1
+    // XML format version 1.0
+    CFPropertyListXMLFormat_v1_0 = 100
+    // Binary format version 1.0
+    CFPropertyListBinaryFormat_v1_0 = 200
+)
+    CFPropertyListFormat
+
+
+FUNCTIONS
+
+func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error)
+    CFPropertyListCreateData returns a []byte containing a serialized
+    representation of a given property list in a specified format.
+
+func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, err error)
+    CFPropertyListCreateWithData decodes the given data into a property list
+    object.
+
+
+TYPES
+
+type CFError struct {
+    Domain      string
+    Code        int
+    UserInfo    map[string]interface{}
+    Description string // comes from CFErrorCopyDescription()
+}
+
+func NewCFError(c C.CFErrorRef) *CFError
+
+func (e *CFError) Error() string
+
+type UnexpectedKeyTypeError struct {
+    CFTypeID int
+}
+
+func (e *UnexpectedKeyTypeError) Error() string
+
+type UnknownCFTypeError struct {
+    CFTypeID int
+}
+
+func (e *UnknownCFTypeError) Error() string
+
+type UnsupportedTypeError struct {
+    Type reflect.Type
+}
+
+func (e *UnsupportedTypeError) Error() string
+
+
