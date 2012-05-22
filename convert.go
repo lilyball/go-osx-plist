@@ -373,7 +373,7 @@ func convertCFArrayToSlice(cfArray C.CFArrayRef) ([]interface{}, error) {
 	count := C.CFArrayGetCount(cfArray)
 	if count == 0 {
 		// short-circuit zero so we can assume cfTypes[0] is valid later
-		return []interface{}{}, nil
+		return nil, nil
 	}
 	cfTypes := make([]cfTypeRef, int(count))
 	cfRange := C.CFRange{0, count}

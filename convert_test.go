@@ -246,7 +246,8 @@ func (a Arbitrary) Generate(rand *rand.Rand, size int) reflect.Value {
 	return reflect.Value{}
 }
 
-// standardize converts any integer values that fit within an int64 into an int64
+// standardize converts any integer values that fit within an int64 into an int64.
+// It also replaces empty slices with nil ones.
 // It returns the new value, and a boolean indicating if any conversion took place
 func standardize(obj interface{}) (newObj interface{}, changed bool) {
 	val := reflect.ValueOf(obj)
@@ -269,6 +270,9 @@ func standardize(obj interface{}) (newObj interface{}, changed bool) {
 			return newT, !t.Equal(newT)
 		}
 	case reflect.Slice:
+		if !val.IsNil() && val.Len() == 0 {
+			return reflect.Zero(typ).Interface(), true
+		}
 		canChange := typ.Elem().Kind() == reflect.Interface
 		if canChange {
 			numElem := val.Len()
