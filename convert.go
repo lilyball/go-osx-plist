@@ -60,10 +60,6 @@ func convertValueToCFType(v reflect.Value) (cfTypeRef, error) {
 		ary, err := convertSliceToCFArray(v)
 		return cfTypeRef(ary), err
 	case reflect.Map:
-		if v.Type().Key().Kind() != reflect.String {
-			// we can only support maps with a string key
-			return nil, &UnsupportedTypeError{v.Type()}
-		}
 		dict, err := convertMapToCFDictionary(v)
 		return cfTypeRef(dict), err
 	case reflect.Interface:
@@ -368,6 +364,10 @@ func convertMapToCFDictionary(m reflect.Value) (C.CFDictionaryRef, error) {
 
 func convertMapToCFDictionaryHelper(m reflect.Value, helper func(reflect.Value) (cfTypeRef, error)) (C.CFDictionaryRef, error) {
 	// assume m is a map, because our caller already checked
+	if m.Type().Key().Kind() != reflect.String {
+		// the map keys aren't strings
+		return nil, &UnsupportedTypeError{m.Type()}
+	}
 	mapKeys := m.MapKeys()
 	keys := make([]cfTypeRef, len(mapKeys))
 	values := make([]cfTypeRef, len(mapKeys))
@@ -398,10 +398,23 @@ func convertMapToCFDictionaryHelper(m reflect.Value, helper func(reflect.Value) 
 		}
 		values[i] = cfObj
 	}
-	// create the dictionary
+	return createCFDictionary(keys, values), nil
+}
+
+// wrapper for C.CFDictionaryCreate, since referencing the callbacks in 2 separate files
+// seems to be triggering some sort of "redefinition" error in cgo
+func createCFDictionary(keys, values []cfTypeRef) C.CFDictionaryRef {
+	if len(keys) != len(values) {
+		panic("plist: unexpected length difference between keys and values")
+	}
+	var keyPtr, valPtr *unsafe.Pointer
+	if len(keys) > 0 {
+		keyPtr = (*unsafe.Pointer)(&keys[0])
+		valPtr = (*unsafe.Pointer)(&values[0])
+	}
 	keyCallbacks := (*C.CFDictionaryKeyCallBacks)(&C.kCFTypeDictionaryKeyCallBacks)
 	valCallbacks := (*C.CFDictionaryValueCallBacks)(&C.kCFTypeDictionaryValueCallBacks)
-	return C.CFDictionaryCreate(nil, (*unsafe.Pointer)(&keys[0]), (*unsafe.Pointer)(&values[0]), C.CFIndex(len(mapKeys)), keyCallbacks, valCallbacks), nil
+	return C.CFDictionaryCreate(nil, keyPtr, valPtr, C.CFIndex(len(keys)), keyCallbacks, valCallbacks)
 }
 
 func convertCFDictionaryToMap(cfDict C.CFDictionaryRef) (map[string]interface{}, error) {
