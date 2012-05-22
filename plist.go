@@ -88,6 +88,15 @@ func (e *UnsupportedTypeError) Error() string {
 	return "plist: unsupported type: " + e.Type.String()
 }
 
+type UnsupportedValueError struct {
+	Value reflect.Value
+	Str   string
+}
+
+func (e *UnsupportedValueError) Error() string {
+	return "json: unsupported value: " + e.Str
+}
+
 type UnknownCFTypeError struct {
 	CFTypeID int
 }
@@ -96,6 +105,12 @@ func (e *UnknownCFTypeError) Error() string {
 	return "plist: unknown CFTypeID " + strconv.Itoa(e.CFTypeID)
 }
 
+// UnsupportedKeyTypeError represents the case where a CFDictionary is being converted
+// back into a map[string]interface{} but its key type is not a CFString.
+//
+// This should never occur in practice, because the only CFDictionaries that
+// should be handled are coming from property lists, which require the keys to
+// be strings.
 type UnsupportedKeyTypeError struct {
 	CFTypeID int
 }

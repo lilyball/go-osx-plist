@@ -6,7 +6,9 @@ import "C"
 
 import (
 	"errors"
+	"math"
 	"reflect"
+	"strconv"
 	"time"
 	"unsafe"
 )
@@ -32,6 +34,10 @@ func convertValueToCFType(obj interface{}) (C.CFTypeRef, error) {
 			return C.CFTypeRef(convertUInt32ToCFNumber(uint32(value.Uint()))), nil
 		}
 	case reflect.Float32, reflect.Float64:
+		f := value.Float()
+		if math.IsInf(f, 0) || math.IsNaN(f) {
+			return nil, &UnsupportedValueError{value, strconv.FormatFloat(f, 'g', -1, value.Type().Bits())}
+		}
 		return C.CFTypeRef(convertFloat64ToCFNumber(value.Float())), nil
 	case reflect.String:
 		cfStr := convertStringToCFString(value.String())
