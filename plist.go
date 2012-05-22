@@ -65,19 +65,22 @@ func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error) {
 		return nil, err
 	}
 	defer cfRelease(cfObj)
+	return cfPropertyListCreateData(cfObj, format)
+}
+
+func cfPropertyListCreateData(plist cfTypeRef, format int) ([]byte, error) {
 	var cfError C.CFErrorRef
-	cfData := C.CFPropertyListCreateData(nil, C.CFPropertyListRef(cfObj), C.CFPropertyListFormat(format), 0, &cfError)
+	cfData := C.CFPropertyListCreateData(nil, C.CFPropertyListRef(plist), C.CFPropertyListFormat(format), 0, &cfError)
 	if cfData == nil {
 		// an error occurred
 		if cfError != nil {
-			defer C.CFRelease(C.CFTypeRef(cfError))
+			defer cfRelease(cfTypeRef(cfError))
 			return nil, NewCFError(cfError)
 		}
 		return nil, errors.New("plist: unknown error in CFPropertyListCreateData")
 	}
-	defer C.CFRelease(C.CFTypeRef(cfData))
-	data := convertCFDataToBytes(cfData)
-	return data, nil
+	defer cfRelease(cfTypeRef(cfData))
+	return convertCFDataToBytes(cfData), nil
 }
 
 type UnsupportedTypeError struct {
