@@ -41,6 +41,42 @@ func TestCFString(t *testing.T) {
 	}
 }
 
+func TestCFString_Invalid(t *testing.T) {
+	// go ahead and generate random strings and see if we actually get objects back.
+	// This is testing the unicode replacement functionality.
+	// Just to be safe in case testing/quick ever fixes their string generation to
+	// only generate valid strings, lets generate []bytes instead and then convert that.
+	f := func(bytes []byte) bool {
+		s := string(bytes)
+		cfStr := convertStringToCFString(s)
+		defer cfRelease(cfTypeRef(cfStr))
+		return cfStr != nil
+	}
+	if err := quick.Check(f, nil); err != nil {
+		t.Error(err)
+	}
+
+	// Test some manually-crafted strings
+	g := func(input, expected string) {
+		cfStr := convertStringToCFString(input)
+		defer cfRelease(cfTypeRef(cfStr))
+		if cfStr == nil {
+			t.Errorf("failed on input %#v", input)
+			return
+		}
+		output := convertCFStringToString(cfStr)
+		if output != expected {
+			t.Errorf("failed on input: %#v. Output: %#v. Expected: %#v", input, output, expected)
+		}
+	}
+	g("hello world", "hello world")
+	g("hello\x00world", "hello\x00world")
+	g("hello\uFFFDworld", "hello\uFFFDworld")
+	g("hello\uFEFFworld\x00", "hello\uFEFFworld\x00")
+	g("hello\x80world", "hello\uFFFDworld")
+	g("hello\xFE\xFFworld", "hello\uFFFD\uFFFDworld")
+}
+
 func TestCFNumber_Int64(t *testing.T) {
 	f := func(i int64) int64 { return i }
 	g := func(i int64) int64 {

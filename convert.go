@@ -10,13 +10,16 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+	"unicode/utf8"
 	"unsafe"
 )
 
 type cfTypeRef C.CFTypeRef
 
 func cfRelease(cfObj cfTypeRef) {
-	C.CFRelease(C.CFTypeRef(cfObj))
+	if cfObj != nil {
+		C.CFRelease(C.CFTypeRef(cfObj))
+	}
 }
 
 func convertValueToCFType(v reflect.Value) (cfTypeRef, error) {
@@ -112,11 +115,43 @@ func convertCFDataToBytes(cfData C.CFDataRef) []byte {
 // ===== CFString =====
 // convertStringToCFString may return nil if the input string is not a valid UTF-8 string
 func convertStringToCFString(str string) C.CFStringRef {
-	// go through unsafe to get the string bytes directly without the copy
-	header := (*reflect.StringHeader)(unsafe.Pointer(&str))
-	bytes := (*C.UInt8)(unsafe.Pointer(header.Data))
-	return C.CFStringCreateWithBytes(nil, bytes, C.CFIndex(header.Len), C.kCFStringEncodingUTF8, C.false)
+	var bytes *C.UInt8
+	var byteCount C.CFIndex
+	if len(str) > 0 {
+		// check the string for invalid encodings
+		// We could use unicode.ValidString() but we also want to count the desired buffer size
+		// and there's no sense in iterating the string more than we have to
+		var errorCount int
+		for i, r := range str {
+			if r == utf8.RuneError {
+				// This may be a valid value in the string. Re-decode it
+				_, size := utf8.DecodeRuneInString(str[i:])
+				if size == 1 {
+					errorCount++
+				}
+			}
+		}
+		if errorCount == 0 {
+			// go through unsafe to get the string bytes directly without the copy
+			header := (*reflect.StringHeader)(unsafe.Pointer(&str))
+			bytes = (*C.UInt8)(unsafe.Pointer(header.Data))
+			byteCount = C.CFIndex(header.Len)
+		} else {
+			// our desired buffer is the length of s, minus the invalid bytes, plus the
+			// replacement bytes.
+			buf := make([]byte, len(str)+(errorCount*(runeErrorLen-1)))
+			i := 0
+			for _, r := range str {
+				i += utf8.EncodeRune(buf[i:], r)
+			}
+			bytes = (*C.UInt8)(unsafe.Pointer(&buf[0]))
+			byteCount = C.CFIndex(len(buf))
+		}
+	}
+	return C.CFStringCreateWithBytes(nil, bytes, byteCount, C.kCFStringEncodingUTF8, C.false)
 }
+
+var runeErrorLen = utf8.RuneLen(utf8.RuneError)
 
 func convertCFStringToString(cfStr C.CFStringRef) string {
 	cstrPtr := C.CFStringGetCStringPtr(cfStr, C.kCFStringEncodingUTF8)
@@ -317,9 +352,7 @@ func convertSliceToCFArrayHelper(slice reflect.Value, helper func(reflect.Value)
 	// defer the release
 	defer func() {
 		for _, cfObj := range plists {
-			if cfObj != nil {
-				cfRelease(cfObj)
-			}
+			cfRelease(cfObj)
 		}
 	}()
 	// convert the slice
@@ -374,14 +407,10 @@ func convertMapToCFDictionaryHelper(m reflect.Value, helper func(reflect.Value) 
 	// defer the release
 	defer func() {
 		for _, cfKey := range keys {
-			if cfKey != nil {
-				cfRelease(cfTypeRef(cfKey))
-			}
+			cfRelease(cfTypeRef(cfKey))
 		}
 		for _, cfVal := range values {
-			if cfVal != nil {
-				cfRelease(cfTypeRef(cfVal))
-			}
+			cfRelease(cfTypeRef(cfVal))
 		}
 	}()
 	// create the keys and values slices
