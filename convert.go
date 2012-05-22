@@ -448,6 +448,9 @@ func createCFDictionary(keys, values []cfTypeRef) C.CFDictionaryRef {
 
 func convertCFDictionaryToMap(cfDict C.CFDictionaryRef) (map[string]interface{}, error) {
 	count := int(C.CFDictionaryGetCount(cfDict))
+	if count == 0 {
+		return map[string]interface{}{}, nil
+	}
 	cfKeys := make([]cfTypeRef, count)
 	cfVals := make([]cfTypeRef, count)
 	C.CFDictionaryGetKeysAndValues(cfDict, (*unsafe.Pointer)(&cfKeys[0]), (*unsafe.Pointer)(&cfVals[0]))
