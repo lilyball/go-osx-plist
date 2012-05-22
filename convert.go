@@ -19,57 +19,64 @@ func cfRelease(cfObj cfTypeRef) {
 	C.CFRelease(C.CFTypeRef(cfObj))
 }
 
-func convertValueToCFType(obj interface{}) (cfTypeRef, error) {
-	value := reflect.ValueOf(obj)
-	switch value.Kind() {
+func convertValueToCFType(v reflect.Value) (cfTypeRef, error) {
+	if !v.IsValid() {
+		return nil, &UnsupportedValueError{v, "invalid value"}
+	}
+	switch v.Kind() {
 	case reflect.Bool:
-		return cfTypeRef(convertBoolToCFBoolean(value.Bool())), nil
+		return cfTypeRef(convertBoolToCFBoolean(v.Bool())), nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return cfTypeRef(convertInt64ToCFNumber(value.Int())), nil
+		return cfTypeRef(convertInt64ToCFNumber(v.Int())), nil
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32:
-		return cfTypeRef(convertUInt32ToCFNumber(uint32(value.Uint()))), nil
+		return cfTypeRef(convertUInt32ToCFNumber(uint32(v.Uint()))), nil
 	case reflect.Uint, reflect.Uintptr:
 		// don't try and convert if uint/uintptr is 64-bits
-		if value.Type().Bits() < 64 {
-			return cfTypeRef(convertUInt32ToCFNumber(uint32(value.Uint()))), nil
+		if v.Type().Bits() < 64 {
+			return cfTypeRef(convertUInt32ToCFNumber(uint32(v.Uint()))), nil
 		}
 	case reflect.Float32, reflect.Float64:
-		f := value.Float()
+		f := v.Float()
 		if math.IsInf(f, 0) || math.IsNaN(f) {
-			return nil, &UnsupportedValueError{value, strconv.FormatFloat(f, 'g', -1, value.Type().Bits())}
+			return nil, &UnsupportedValueError{v, strconv.FormatFloat(f, 'g', -1, v.Type().Bits())}
 		}
-		return cfTypeRef(convertFloat64ToCFNumber(value.Float())), nil
+		return cfTypeRef(convertFloat64ToCFNumber(v.Float())), nil
 	case reflect.String:
-		cfStr := convertStringToCFString(value.String())
+		cfStr := convertStringToCFString(v.String())
 		if cfStr == nil {
 			return nil, errors.New("plist: could not convert string to CFStringRef")
 		}
 		return cfTypeRef(cfStr), nil
 	case reflect.Struct:
 		// only struct type we support is time.Time
-		if value.Type() == reflect.TypeOf(time.Time{}) {
-			return cfTypeRef(convertTimeToCFDate(obj.(time.Time))), nil
+		if v.Type() == reflect.TypeOf(time.Time{}) {
+			return cfTypeRef(convertTimeToCFDate(v.Interface().(time.Time))), nil
 		}
 	case reflect.Array, reflect.Slice:
 		// check for []byte first (byte is uint8)
-		if value.Type().Elem().Kind() == reflect.Uint8 {
-			return cfTypeRef(convertBytesToCFData(obj.([]byte))), nil
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			return cfTypeRef(convertBytesToCFData(v.Interface().([]byte))), nil
 		}
-		ary, err := convertSliceToCFArray(value)
+		ary, err := convertSliceToCFArray(v)
 		return cfTypeRef(ary), err
 	case reflect.Map:
-		if value.Type().Key().Kind() != reflect.String {
+		if v.Type().Key().Kind() != reflect.String {
 			// we can only support maps with a string key
-			return nil, &UnsupportedTypeError{value.Type()}
+			return nil, &UnsupportedTypeError{v.Type()}
 		}
-		dict, err := convertMapToCFDictionary(value)
+		dict, err := convertMapToCFDictionary(v)
 		return cfTypeRef(dict), err
+	case reflect.Interface:
+		if v.IsNil() {
+			return nil, &UnsupportedValueError{v, "nil interface"}
+		}
+		return convertValueToCFType(v.Elem())
 	}
-	return nil, &UnsupportedTypeError{value.Type()}
+	return nil, &UnsupportedTypeError{v.Type()}
 }
 
 // we shouldn't ever get an error from this, but I'd rather not panic
-func convertCFTypeToValue(cfType cfTypeRef) (interface{}, error) {
+func convertCFTypeToInterface(cfType cfTypeRef) (interface{}, error) {
 	typeId := C.CFGetTypeID(C.CFTypeRef(cfType))
 	switch typeId {
 	case C.CFStringGetTypeID():
@@ -301,6 +308,10 @@ func convertCFNumberToInterface(cfNumber C.CFNumberRef) interface{} {
 // ===== CFArray =====
 // use reflect.Value to support slices of any type
 func convertSliceToCFArray(slice reflect.Value) (C.CFArrayRef, error) {
+	return convertSliceToCFArrayHelper(slice, convertValueToCFType)
+}
+
+func convertSliceToCFArrayHelper(slice reflect.Value, helper func(reflect.Value) (cfTypeRef, error)) (C.CFArrayRef, error) {
 	if slice.Len() == 0 {
 		// short-circuit 0, so we can assume plists[0] is valid later
 		return C.CFArrayCreate(nil, nil, 0, nil), nil
@@ -317,7 +328,7 @@ func convertSliceToCFArray(slice reflect.Value) (C.CFArrayRef, error) {
 	}()
 	// convert the slice
 	for i := 0; i < slice.Len(); i++ {
-		cfType, err := convertValueToCFType(slice.Index(i).Interface())
+		cfType, err := helper(slice.Index(i))
 		if err != nil {
 			return nil, err
 		}
@@ -340,7 +351,7 @@ func convertCFArrayToSlice(cfArray C.CFArrayRef) ([]interface{}, error) {
 	C.CFArrayGetValues(cfArray, cfRange, (*unsafe.Pointer)(&cfTypes[0]))
 	result := make([]interface{}, int(count))
 	for i, cfObj := range cfTypes {
-		val, err := convertCFTypeToValue(cfObj)
+		val, err := convertCFTypeToInterface(cfObj)
 		if err != nil {
 			return nil, err
 		}
@@ -352,6 +363,10 @@ func convertCFArrayToSlice(cfArray C.CFArrayRef) ([]interface{}, error) {
 // ===== CFDictionary =====
 // use reflect.Value to support maps of any type
 func convertMapToCFDictionary(m reflect.Value) (C.CFDictionaryRef, error) {
+	return convertMapToCFDictionaryHelper(m, convertValueToCFType)
+}
+
+func convertMapToCFDictionaryHelper(m reflect.Value, helper func(reflect.Value) (cfTypeRef, error)) (C.CFDictionaryRef, error) {
 	// assume m is a map, because our caller already checked
 	mapKeys := m.MapKeys()
 	keys := make([]cfTypeRef, len(mapKeys))
@@ -377,7 +392,7 @@ func convertMapToCFDictionary(m reflect.Value) (C.CFDictionaryRef, error) {
 			return nil, errors.New("plist: could not convert string to CFStringRef")
 		}
 		keys[i] = cfTypeRef(cfStr)
-		cfObj, err := convertValueToCFType(m.MapIndex(keyVal).Interface())
+		cfObj, err := helper(m.MapIndex(keyVal))
 		if err != nil {
 			return nil, err
 		}
@@ -402,7 +417,7 @@ func convertCFDictionaryToMap(cfDict C.CFDictionaryRef) (map[string]interface{},
 			return nil, &UnsupportedKeyTypeError{int(typeId)}
 		}
 		key := convertCFStringToString(C.CFStringRef(cfKey))
-		val, err := convertCFTypeToValue(cfVals[i])
+		val, err := convertCFTypeToInterface(cfVals[i])
 		if err != nil {
 			return nil, err
 		}

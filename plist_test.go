@@ -27,7 +27,9 @@ func TestArbitraryPlist(t *testing.T) {
 		if err := quick.CheckEqual(f, g, nil); err != nil {
 			out1 := err.(*quick.CheckEqualError).Out1[0]
 			out2 := err.(*quick.CheckEqualError).Out2[0]
-			findDifferences(t, out1, out2)
+			if out1 != nil && out2 != nil {
+				findDifferences(t, out1, out2)
+			}
 			t.Error(err)
 		}
 	}

@@ -275,11 +275,11 @@ func TestArbitrary(t *testing.T) {
 	// test arbitrary values of any plistable type
 	f := func(arb Arbitrary) interface{} { a, _ := standardize(arb.Value); return a }
 	g := func(arb Arbitrary) interface{} {
-		if cfObj, err := convertValueToCFType(arb.Value); err != nil {
+		if cfObj, err := convertValueToCFType(reflect.ValueOf(arb.Value)); err != nil {
 			t.Error(err)
 		} else {
 			defer cfRelease(cfTypeRef(cfObj))
-			if val, err := convertCFTypeToValue(cfObj); err != nil {
+			if val, err := convertCFTypeToInterface(cfObj); err != nil {
 				t.Error(err)
 			} else {
 				a, _ := standardize(val)

@@ -50,7 +50,7 @@ func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, e
 		return nil, 0, errors.New("plist: unknown error in CFPropertyListCreateWithData")
 	}
 	defer C.CFRelease(C.CFTypeRef(cfObj))
-	val, err := convertCFTypeToValue(cfTypeRef(cfObj))
+	val, err := convertCFTypeToInterface(cfTypeRef(cfObj))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -60,7 +60,7 @@ func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, e
 // CFPropertyListCreateData returns a []byte containing a serialized representation
 // of a given property list in a specified format.
 func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error) {
-	cfObj, err := convertValueToCFType(plist)
+	cfObj, err := convertValueToCFType(reflect.ValueOf(plist))
 	if err != nil {
 		return nil, err
 	}
