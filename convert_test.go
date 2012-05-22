@@ -247,6 +247,7 @@ func (a Arbitrary) Generate(rand *rand.Rand, size int) reflect.Value {
 }
 
 // standardize converts any integer values that fit within an int64 into an int64.
+// It also truncates any floating values that have no fractional part into an int64
 // It also replaces empty slices with nil ones.
 // It returns the new value, and a boolean indicating if any conversion took place
 func standardize(obj interface{}) (newObj interface{}, changed bool) {
@@ -260,6 +261,12 @@ func standardize(obj interface{}) (newObj interface{}, changed bool) {
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
 		return val.Int(), true
+	case reflect.Float32, reflect.Float64:
+		f := val.Float()
+		_, rem := math.Modf(f)
+		if rem == 0 {
+			return int64(f), true
+		}
 	case reflect.Struct:
 		// We truncate to millisecond precision in the conversion, but we can't even rely on that
 		// for testing purposes because far-future timestamps lose even that much.
