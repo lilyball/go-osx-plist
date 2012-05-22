@@ -50,7 +50,7 @@ func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, e
 		return nil, 0, errors.New("plist: unknown error in CFPropertyListCreateWithData")
 	}
 	defer C.CFRelease(C.CFTypeRef(cfObj))
-	val, err := convertCFTypeToValue(C.CFTypeRef(cfObj))
+	val, err := convertCFTypeToValue(cfTypeRef(cfObj))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -64,7 +64,7 @@ func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer C.CFRelease(cfObj)
+	defer cfRelease(cfObj)
 	var cfError C.CFErrorRef
 	cfData := C.CFPropertyListCreateData(nil, C.CFPropertyListRef(cfObj), C.CFPropertyListFormat(format), 0, &cfError)
 	if cfData == nil {
