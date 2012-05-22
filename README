@@ -65,6 +65,13 @@ func (e *UnknownCFTypeError) Error() string
 type UnsupportedKeyTypeError struct {
     CFTypeID int
 }
+    UnsupportedKeyTypeError represents the case where a CFDictionary is
+    being converted back into a map[string]interface{} but its key type is
+    not a CFString.
+
+    This should never occur in practice, because the only CFDictionaries
+    that should be handled are coming from property lists, which require the
+    keys to be strings.
 
 func (e *UnsupportedKeyTypeError) Error() string
 
@@ -73,5 +80,12 @@ type UnsupportedTypeError struct {
 }
 
 func (e *UnsupportedTypeError) Error() string
+
+type UnsupportedValueError struct {
+    Value reflect.Value
+    Str   string
+}
+
+func (e *UnsupportedValueError) Error() string
 
 
