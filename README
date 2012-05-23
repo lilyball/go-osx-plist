@@ -42,6 +42,111 @@ func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, e
     CFPropertyListCreateWithData decodes the given data into a property list
     object.
 
+func Marshal(obj interface{}, format int) ([]byte, error)
+    Marshal returns the property list encoding of v.
+
+    The Marshall interface is very heavily based off of
+    encoding/json.Marshal.
+
+    Marshal traverses the value ve recursively. If an encountered value
+    implements the Marshaler interface and is not a nil pointer, Marshal
+    calls its MarshalPlist method to produce a property list object (as
+    defined by CFPropertyListCreateData()). If the method returns any other
+    object, that is considered an error.
+
+    Otherwise, Marshal uses the following type-dependent default encodings:
+
+    Boolean values encode as CFBooleans.
+
+    Floating point and integer values encode as CFNumbers, except for 64-bit
+    unsigned integers which cause Marshal to return an
+    UnsupportedValueError.
+
+    String values encode as CFStrings, with each invalid UTF-8 sequence
+    replaced by the encoding of the Unicode replacement character U+FFFD.
+
+    Time values encode as CFDate, with millisecond precision. Far-future or
+    far-past dates may have less than millisecond precision.
+
+    Array and slice values encode as CFArrays, except that []byte encodes as
+    a CFData.
+
+    Struct values encode as CFDictionaries. Each exported struct field
+    becomes a memober of the object unless
+
+	- the field's tag is "-"
+	- the field is empty and its tag specifies the "omitempty" option.
+
+    The empty values are false, 0, any nil pointer or interface value, and
+    any array, slice, map, or string of length zero. The object's default
+    key string is the struct field name but can be specified in the struct
+    field's tag value. The "plist" key in the struct field's tag value is
+    the key name, followed by an optional comma and options. Examples:
+
+	// Field is ignored by this package.
+	Field int `plist:"-"`
+	// Field appears in plist as key "myName".
+	Field int `plist:"myName"`
+	// Field appears in plist as key "myName" and
+	// the field is omitted from the object if its value is empty,
+	// as defined above.
+	Field int `plist:"myName,omitempty"`
+	// Field appears in plist as key "Field" (the default), but
+	// the field is skipped if empty.
+	// Note the leading comma.
+	Field int `plist:",omitempty"`
+
+    The key name will be used if it's a non-empty string consisting of only
+    Unicode letters, digits, dollar signs, percent signs, hyphens,
+    underscores and slashes.
+
+    Map values encode as CFDictionaries. The map's key type must be string.
+
+    Pointer values encode as the value pointed to. A nil pointer causes
+    Marshal to return an UnsupportedValueError.
+
+    Interface values encode as the value contained in the interface. A nil
+    interface value causes Marshal to return an UnsupportedValueError.
+
+    Channel, complex, and function values cannot be encoded in a plist.
+    Attempting to encode such a value causes Marshal to return an
+    UnsupportedTypeError.
+
+    Property lists cannot represent cyclic data structures and Marshal does
+    not handle them. Passing cyclic structures to Marshal will result in an
+    infinite recursion.
+
+func Unmarshal(data []byte, v interface{}) (format int, err error)
+    Unmarshal parses the plist-encoded data and stores the result in the
+    value pointed to by v.
+
+    Unmarshal uses the inverse of the encodings that Marshal uses,
+    allocating maps, slices, and pointers as necessary, with the following
+    additional rules:
+
+    To unmarshal a plist into a pointer, Unmarshal unmarshals the plist into
+    the value pointed at by the pointer. If the pointer is nil, Unmarshal
+    allocates a new value for it to point to.
+
+    To unmarshal a plist into an interface value, Unmarshal unmarshals the
+    plist into the concrete value contained in the interface value. If the
+    interface value is nil, that is, has no concrete value stored in it,
+    Unmarshal stores one of these in the interface value:
+
+	bool, for CFBooleans
+	int8, int16, int32, int64, float32, or float64 for CFNumbers
+	string, for CFStrings
+	[]byte, for CFDatas
+	time.Time, for CFDates
+	[]interface{}, for CFArrays
+	map[string]interface{}, for CFDictionaries
+
+    If a plist value is not appropriate for a given target type, or if a
+    plist number overflows the target type, Unmarshal skips that field and
+    completes the unmarshalling as best it can. If no more serious errors
+    are encountered, Unmarshal returns an UnmarshalTypeError describing the
+    earliest such error.
+
 
 TYPES
 
@@ -56,11 +161,51 @@ func NewCFError(c C.CFErrorRef) *CFError
 
 func (e *CFError) Error() string
 
+type InvalidUnmarshalError struct {
+    Type reflect.Type
+}
+    An InvalidUnmarshalError describes an invalid argument passed to
+    Unmarshal. (The argument to Unmarshal must be a non-nil pointer.)
+
+func (e *InvalidUnmarshalError) Error() string
+
+type Marshaler interface {
+    MarshalPlist() (interface{}, error)
+}
+    Marshaler is the interface implemented by objects that can marshal
+    themselves into a property list.}
+
 type UnknownCFTypeError struct {
-    CFTypeID int
+    CFTypeID C.CFTypeID
 }
 
 func (e *UnknownCFTypeError) Error() string
+
+type UnmarshalFieldError struct {
+    Key   string
+    Type  reflect.Type
+    Field reflect.StructField
+}
+    An UnmarshalFieldError describes a plist dictionary key that led to an
+    unexported (and therefore unwritable) struct field.
+
+func (e *UnmarshalFieldError) Error() string
+
+type UnmarshalTypeError struct {
+    Value string       // description of plist value - "CFBoolean, "CFArray", "CFNumber -5"
+    Type  reflect.Type // type of Go value it could not be assigned to
+}
+    An UnmarshalTypeError describes a plist value that was not appropriate
+    for a value of a specific Go type.
+
+func (e *UnmarshalTypeError) Error() string
+
+type Unmarshaler interface {
+    UnmarshalPlist(interface{}) error
+}
+    Unmarshaler is the interface implemented by objects that can unmarshal a
+    plist representation of themselves. The input can be assumed to be a
+    valid basic property list object.
 
 type UnsupportedKeyTypeError struct {
     CFTypeID int
@@ -87,5 +232,19 @@ type UnsupportedValueError struct {
 }
 
 func (e *UnsupportedValueError) Error() string
+
+
+BUGS
+
+    This package ignores anonymous (embedded) struct fields during encoding
+    and decoding. This is done to maintain parity with the encoding/json
+    package. At such time that encoding/json changes behavior, this package
+    may also change. To force an anonymous field to be ignored in all future
+    versions of this package, use an explicit `plist:"-"` tag in the struct
+    definition.
+
+    encoding/json only encodes []byte slices as base64-encoded strings, not
+    []byte arrays. I don't know why it does this, so this package does not
+    match that behavior.
 
 
