@@ -17,9 +17,9 @@ import (
 //
 // The Marshall interface is very heavily based off of encoding/json.Marshal.
 //
-// Marshal traverses the value ve recursively. If an encountered value
-// implements the Marshaler interface and is not a nil pointer, Marshal calls
-// its MarshalPlist method to produce a property list object (as defined by
+// Marshal traverses the value v recursively. If an encountered value implements
+// the Marshaler interface and is not a nil pointer, Marshal calls its
+// MarshalPlist method to produce a property list object (as defined by
 // CFPropertyListCreateData()). If the method returns any other object, that is
 // considered an error.
 //
@@ -40,7 +40,7 @@ import (
 // CFData.
 //
 // Struct values encode as CFDictionaries. Each exported struct field becomes a
-// memober of the object unless
+// member of the object unless
 //
 //     - the field's tag is "-"
 //     - the field is empty and its tag specifies the "omitempty" option.
@@ -83,8 +83,8 @@ import (
 // Property lists cannot represent cyclic data structures and Marshal does not
 // handle them. Passing cyclic structures to Marshal will result in an infinite
 // recursion.
-func Marshal(obj interface{}, format int) ([]byte, error) {
-	cfObj, err := marshalValue(reflect.ValueOf(obj))
+func Marshal(v interface{}, format int) ([]byte, error) {
+	cfObj, err := marshalValue(reflect.ValueOf(v))
 	if err != nil {
 		return nil, err
 	}
