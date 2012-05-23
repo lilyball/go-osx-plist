@@ -630,7 +630,3 @@ func (e *InvalidUnmarshalError) Error() string {
 // package. At such time that encoding/json changes behavior, this package may
 // also change. To force an anonymous field to be ignored in all future versions
 // of this package, use an explicit `plist:"-"` tag in the struct definition.
-
-// BUG(kballard): encoding/json only encodes []byte slices as base64-encoded
-// strings, not []byte arrays. I don't know why it does this, so this package
-// does not match that behavior.

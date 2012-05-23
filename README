@@ -243,8 +243,4 @@ BUGS
     versions of this package, use an explicit `plist:"-"` tag in the struct
     definition.
 
-    encoding/json only encodes []byte slices as base64-encoded strings, not
-    []byte arrays. I don't know why it does this, so this package does not
-    match that behavior.
-
 
