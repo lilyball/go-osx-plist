@@ -1,7 +1,7 @@
 package plist
 
 // #import <CoreFoundation/CoreFoundation.h>
-// #import <CoreGraphics/CGBase.h> // for CGFloat
+// #import <ApplicationServices/ApplicationServices.h> // for CoreGraphics (for CGFloat)
 import "C"
 
 import (
