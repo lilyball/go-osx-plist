@@ -94,6 +94,7 @@ func Marshal(obj interface{}, format int) ([]byte, error) {
 
 var timeType = reflect.TypeOf(time.Time{})
 var byteSliceType = reflect.TypeOf([]byte(nil))
+var stringType = reflect.TypeOf("")
 
 func marshalValue(v reflect.Value) (cfTypeRef, error) {
 	if !v.IsValid() {
@@ -320,11 +321,259 @@ func isValidName(name string) bool {
 // the unmarshalling as best it can. If no more serious errors are encountered,
 // Unmarshal returns an UnmarshalTypeError describing the earliest such error.
 func Unmarshal(data []byte, v interface{}) (format int, err error) {
-	panic("Unimplemented")
+	cfObj, format, err := cfPropertyListCreateWithData(data)
+	if err != nil {
+		return 0, err
+	}
+	defer cfRelease(cfObj)
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return format, &InvalidUnmarshalError{reflect.TypeOf(v)}
+	}
+	state := &unmarshalState{}
+	if err := state.unmarshalValue(cfObj, rv); err != nil {
+		return format, err
+	}
+	return format, state.err
+}
+
+type unmarshalState struct {
+	err error
+}
+
+var (
+	cfArrayTypeID      = C.CFArrayGetTypeID()
+	cfBooleanTypeID    = C.CFBooleanGetTypeID()
+	cfDataTypeID       = C.CFDataGetTypeID()
+	cfDateTypeID       = C.CFDateGetTypeID()
+	cfDictionaryTypeID = C.CFDictionaryGetTypeID()
+	cfNumberTypeID     = C.CFNumberGetTypeID()
+	cfStringTypeID     = C.CFStringGetTypeID()
+)
+
+var cfTypeMap = map[C.CFTypeID]reflect.Type{
+	cfArrayTypeID:      reflect.TypeOf([]interface{}(nil)),
+	cfBooleanTypeID:    reflect.TypeOf(false),
+	cfDataTypeID:       reflect.TypeOf([]byte(nil)),
+	cfDateTypeID:       reflect.TypeOf(time.Time{}),
+	cfDictionaryTypeID: reflect.TypeOf(map[string]interface{}(nil)),
+	cfNumberTypeID:     reflect.TypeOf(int64(0)),
+	cfStringTypeID:     reflect.TypeOf(""),
+}
+
+var cfTypeNames = map[C.CFTypeID]string{
+	cfArrayTypeID:      "CFArray",
+	cfBooleanTypeID:    "CFBoolean",
+	cfDataTypeID:       "CFData",
+	cfDateTypeID:       "CFDate",
+	cfDictionaryTypeID: "CFDictionary",
+	cfNumberTypeID:     "CFNumber",
+	cfStringTypeID:     "CFString",
+}
+
+func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) error {
+	vType := v.Type()
+	var unmarshaler Unmarshaler
+	if u, ok := v.Interface().(Unmarshaler); ok {
+		unmarshaler = u
+	} else if v.Kind() != reflect.Ptr && vType.Name() != "" && v.CanAddr() {
+		// matching the encoding/json behavior here
+		// If v is a named type and is addressable, check its address for Unmarshaler.
+		vA := v.Addr()
+		if u, ok := vA.Interface().(Unmarshaler); ok {
+			unmarshaler = u
+		}
+	}
+	if unmarshaler != nil {
+		// flip over to the dumb conversion routine so we have something to give UnmarshalPlist()
+		plist, err := convertCFTypeToInterface(cfObj)
+		if err != nil {
+			return err
+		}
+		if v.Kind() == reflect.Ptr && v.IsNil() {
+			v.Set(reflect.New(vType.Elem()))
+			unmarshaler = v.Interface().(Unmarshaler)
+		}
+		return unmarshaler.UnmarshalPlist(plist)
+	}
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			v.Set(reflect.New(vType.Elem()))
+		}
+		return state.unmarshalValue(cfObj, v.Elem())
+	}
+	typeID := C.CFGetTypeID(C.CFTypeRef(cfObj))
+	if v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			// pick an appropriate type based on the cfobj
+			typ, ok := cfTypeMap[typeID]
+			if !ok {
+				return &UnknownCFTypeError{typeID}
+			}
+			if !typ.AssignableTo(vType) {
+				// v must be some interface that our object doesn't conform to
+				state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
+				return nil
+			}
+			v.Set(reflect.Zero(typ))
+		}
+		return state.unmarshalValue(cfObj, v.Elem())
+	}
+	switch typeID {
+	case cfArrayTypeID:
+		if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
+			return nil
+		}
+		return convertCFArrayToSliceHelper(C.CFArrayRef(cfObj), func(elem cfTypeRef, idx, count int) (bool, error) {
+			if idx == 0 && v.Kind() == reflect.Slice {
+				v.Set(reflect.MakeSlice(vType, count, count))
+			} else if v.Kind() == reflect.Array && idx >= v.Len() {
+				return false, nil
+			}
+			if err := state.unmarshalValue(elem, v.Index(idx)); err != nil {
+				return false, err
+			}
+			return true, nil
+		})
+	case cfBooleanTypeID:
+		if v.Kind() != reflect.Bool {
+			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
+			return nil
+		}
+		v.SetBool(C.CFBooleanGetValue(C.CFBooleanRef(cfObj)) != C.false)
+		return nil
+	case cfDataTypeID:
+		if !byteSliceType.AssignableTo(vType) {
+			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
+			return nil
+		}
+		v.SetBytes(convertCFDataToBytes(C.CFDataRef(cfObj)))
+		return nil
+	case cfDateTypeID:
+		if !timeType.AssignableTo(vType) {
+			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
+			return nil
+		}
+		v.Set(reflect.ValueOf(convertCFDateToTime(C.CFDateRef(cfObj))))
+	case cfDictionaryTypeID:
+		if v.Kind() == reflect.Map {
+			// it's a map. Check its key type first
+			if !stringType.AssignableTo(vType.Key()) {
+				state.recordError(&UnmarshalTypeError{cfTypeNames[cfStringTypeID], vType.Key()})
+				return nil
+			}
+			if v.IsNil() {
+				v.Set(reflect.MakeMap(vType))
+			}
+			return convertCFDictionaryToMapHelper(C.CFDictionaryRef(cfObj), func(key string, value cfTypeRef, count int) error {
+				keyVal := reflect.ValueOf(key)
+				val := v.MapIndex(keyVal)
+				if !val.IsValid() {
+					val = reflect.New(vType.Elem())
+					v.SetMapIndex(keyVal, val)
+				}
+				if err := state.unmarshalValue(value, val); err != nil {
+					return err
+				}
+				return nil
+			})
+		} else if v.Kind() == reflect.Struct {
+			return convertCFDictionaryToMapHelper(C.CFDictionaryRef(cfObj), func(key string, value cfTypeRef, count int) error {
+				// we need to iterate the fields because the tag might rename the key
+				var f reflect.StructField
+				var ok bool
+				for i := 0; i < vType.NumField(); i++ {
+					sf := vType.Field(i)
+					tag := sf.Tag.Get("plist")
+					if tag == "-" {
+						// Pretend this field doesn't exist
+						continue
+					}
+					if sf.Anonymous {
+						// Match encoding/json's behavior here and pretend it doesn't exist
+						continue
+					}
+					name, _ := parseTag(tag)
+					if name == key {
+						f = sf
+						ok = true
+						// This is unambiguously the right match
+						break
+					}
+					if sf.Name == key {
+						f = sf
+						ok = true
+					}
+					// encoding/json does a case-insensitive match. Lets do that too
+					if !ok && strings.EqualFold(sf.Name, key) {
+						f = sf
+						ok = true
+					}
+				}
+				if ok {
+					if f.PkgPath != "" {
+						// this is an unexported field
+						return &UnmarshalFieldError{key, vType, f}
+					}
+					vElem := v.FieldByIndex(f.Index)
+					if err := state.unmarshalValue(value, vElem); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		}
+		state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
+		return nil
+	case cfNumberTypeID:
+		switch v.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			i := convertCFNumberToInt64(C.CFNumberRef(cfObj))
+			if v.OverflowInt(i) {
+				state.recordError(&UnmarshalTypeError{cfTypeNames[typeID] + " " + strconv.FormatInt(i, 10), vType})
+				return nil
+			}
+			v.SetInt(i)
+			return nil
+		case reflect.Uint, reflect.Uintptr, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			u := uint64(convertCFNumberToUInt32(C.CFNumberRef(cfObj)))
+			if v.OverflowUint(u) {
+				state.recordError(&UnmarshalTypeError{cfTypeNames[typeID] + " " + strconv.FormatUint(u, 10), vType})
+				return nil
+			}
+			v.SetUint(u)
+			return nil
+		case reflect.Float32, reflect.Float64:
+			f := convertCFNumberToFloat64(C.CFNumberRef(cfObj))
+			if v.OverflowFloat(f) {
+				state.recordError(&UnmarshalTypeError{cfTypeNames[typeID] + " " + strconv.FormatFloat(f, 'f', -1, 64), vType})
+				return nil
+			}
+			v.SetFloat(f)
+			return nil
+		}
+		state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
+		return nil
+	case cfStringTypeID:
+		if v.Kind() != reflect.String {
+			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
+			return nil
+		}
+		v.SetString(convertCFStringToString(C.CFStringRef(cfObj)))
+		return nil
+	}
+	return &UnknownCFTypeError{typeID}
+}
+
+func (state *unmarshalState) recordError(err error) {
+	if state.err == nil {
+		state.err = err
+	}
 }
 
 // Marshaler is the interface implemented by objects that can marshal themselves
-// into a property list.
+// into a property list.}
 type Marshaler interface {
 	MarshalPlist() (interface{}, error)
 }
@@ -339,7 +588,7 @@ type Unmarshaler interface {
 // An UnmarshalTypeError describes a plist value that was not appropriate for a
 // value of a specific Go type.
 type UnmarshalTypeError struct {
-	Value string       // description of plist value - "CFBoolean", "CFArray", etc.
+	Value string       // description of plist value - "CFBoolean, "CFArray", "CFNumber -5"
 	Type  reflect.Type // type of Go value it could not be assigned to
 }
 

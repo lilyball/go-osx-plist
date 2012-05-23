@@ -36,25 +36,33 @@ const (
 
 // CFPropertyListCreateWithData decodes the given data into a property list object.
 func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, err error) {
+	cfObj, format, err := cfPropertyListCreateWithData(data)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cfRelease(cfObj)
+	val, err := convertCFTypeToInterface(cfObj)
+	if err != nil {
+		return nil, 0, err
+	}
+	return val, format, nil
+}
+
+func cfPropertyListCreateWithData(data []byte) (cfObj cfTypeRef, format int, err error) {
 	cfData := convertBytesToCFData(data)
 	defer C.CFRelease(C.CFTypeRef(cfData))
 	var cfFormat C.CFPropertyListFormat
 	var cfError C.CFErrorRef
-	cfObj := C.CFPropertyListCreateWithData(nil, cfData, 0, &cfFormat, &cfError)
-	if cfObj == nil {
+	cfPlist := C.CFPropertyListCreateWithData(nil, cfData, 0, &cfFormat, &cfError)
+	if cfPlist == nil {
 		// an error occurred
 		if cfError != nil {
-			defer C.CFRelease(C.CFTypeRef(cfError))
+			defer cfRelease(cfTypeRef(cfError))
 			return nil, 0, NewCFError(cfError)
 		}
 		return nil, 0, errors.New("plist: unknown error in CFPropertyListCreateWithData")
 	}
-	defer C.CFRelease(C.CFTypeRef(cfObj))
-	val, err := convertCFTypeToInterface(cfTypeRef(cfObj))
-	if err != nil {
-		return nil, 0, err
-	}
-	return val, int(cfFormat), nil
+	return cfTypeRef(cfPlist), int(cfFormat), nil
 }
 
 // CFPropertyListCreateData returns a []byte containing a serialized representation
@@ -101,11 +109,11 @@ func (e *UnsupportedValueError) Error() string {
 }
 
 type UnknownCFTypeError struct {
-	CFTypeID int
+	CFTypeID C.CFTypeID
 }
 
 func (e *UnknownCFTypeError) Error() string {
-	return "plist: unknown CFTypeID " + strconv.Itoa(e.CFTypeID)
+	return "plist: unknown CFTypeID " + strconv.Itoa(int(e.CFTypeID))
 }
 
 // UnsupportedKeyTypeError represents the case where a CFDictionary is being converted

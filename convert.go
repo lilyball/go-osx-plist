@@ -95,7 +95,7 @@ func convertCFTypeToInterface(cfType cfTypeRef) (interface{}, error) {
 		dict, err := convertCFDictionaryToMap(C.CFDictionaryRef(cfType))
 		return dict, err
 	}
-	return nil, &UnknownCFTypeError{int(typeId)}
+	return nil, &UnknownCFTypeError{typeId}
 }
 
 // ===== CFData =====
@@ -370,23 +370,42 @@ func convertSliceToCFArrayHelper(slice reflect.Value, helper func(reflect.Value)
 }
 
 func convertCFArrayToSlice(cfArray C.CFArrayRef) ([]interface{}, error) {
+	var result []interface{}
+	err := convertCFArrayToSliceHelper(cfArray, func(elem cfTypeRef, idx, count int) (bool, error) {
+		if result == nil {
+			result = make([]interface{}, count)
+		}
+		val, err := convertCFTypeToInterface(elem)
+		if err != nil {
+			return false, err
+		}
+		result[idx] = val
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func convertCFArrayToSliceHelper(cfArray C.CFArrayRef, helper func(elem cfTypeRef, idx, count int) (bool, error)) error {
 	count := C.CFArrayGetCount(cfArray)
 	if count == 0 {
-		// short-circuit zero so we can assume cfTypes[0] is valid later
-		return nil, nil
+		return nil
 	}
 	cfTypes := make([]cfTypeRef, int(count))
 	cfRange := C.CFRange{0, count}
 	C.CFArrayGetValues(cfArray, cfRange, (*unsafe.Pointer)(&cfTypes[0]))
-	result := make([]interface{}, int(count))
 	for i, cfObj := range cfTypes {
-		val, err := convertCFTypeToInterface(cfObj)
+		keepGoing, err := helper(cfObj, i, int(count))
 		if err != nil {
-			return nil, err
+			return err
 		}
-		result[i] = val
+		if !keepGoing {
+			break
+		}
 	}
-	return result, nil
+	return nil
 }
 
 // ===== CFDictionary =====
@@ -447,26 +466,43 @@ func createCFDictionary(keys, values []cfTypeRef) C.CFDictionaryRef {
 }
 
 func convertCFDictionaryToMap(cfDict C.CFDictionaryRef) (map[string]interface{}, error) {
+	var m map[string]interface{}
+	convertCFDictionaryToMapHelper(cfDict, func(key string, value cfTypeRef, count int) error {
+		if m == nil {
+			m = make(map[string]interface{}, count)
+		}
+		val, err := convertCFTypeToInterface(value)
+		if err != nil {
+			return err
+		}
+		m[key] = val
+		return nil
+	})
+	if m == nil {
+		// must have been an empty dictionary
+		m = make(map[string]interface{}, 0)
+	}
+	return m, nil
+}
+
+func convertCFDictionaryToMapHelper(cfDict C.CFDictionaryRef, helper func(key string, value cfTypeRef, count int) error) error {
 	count := int(C.CFDictionaryGetCount(cfDict))
 	if count == 0 {
-		return map[string]interface{}{}, nil
+		return nil
 	}
 	cfKeys := make([]cfTypeRef, count)
 	cfVals := make([]cfTypeRef, count)
 	C.CFDictionaryGetKeysAndValues(cfDict, (*unsafe.Pointer)(&cfKeys[0]), (*unsafe.Pointer)(&cfVals[0]))
-	m := make(map[string]interface{}, count)
 	for i := 0; i < count; i++ {
 		cfKey := cfKeys[i]
 		typeId := C.CFGetTypeID(C.CFTypeRef(cfKey))
 		if typeId != C.CFStringGetTypeID() {
-			return nil, &UnsupportedKeyTypeError{int(typeId)}
+			return &UnsupportedKeyTypeError{int(typeId)}
 		}
 		key := convertCFStringToString(C.CFStringRef(cfKey))
-		val, err := convertCFTypeToInterface(cfVals[i])
-		if err != nil {
-			return nil, err
+		if err := helper(key, cfVals[i], count); err != nil {
+			return err
 		}
-		m[key] = val
 	}
-	return m, nil
+	return nil
 }
