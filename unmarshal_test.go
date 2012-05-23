@@ -88,7 +88,7 @@ func TestUnmarshal(t *testing.T) {
 			t.Errorf("#%d: %#v", i, err)
 			continue
 		}
-		indata, err := CFPropertyListCreateData(in, CFPropertyListXMLFormat_v1_0)
+		indata, err := CFPropertyListCreateData(in, XMLFormat)
 		if err != nil {
 			t.Errorf("#%d: %#v", i, err)
 			continue

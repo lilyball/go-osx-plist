@@ -21,34 +21,50 @@ import "errors"
 import "reflect"
 import "strconv"
 
-// CFPropertyListFormat
-const (
+// Format represents the format of the property list
+type Format struct {
+	cfFormat C.CFPropertyListFormat // don't export this, we want control over all valid values
+}
+
+var (
 	// OpenStep format (use of this format is discouraged)
-	CFPropertyListOpenStepFormat = 1
+	OpenStepFormat = Format{1}
 	// XML format version 1.0
-	CFPropertyListXMLFormat_v1_0 = 100
+	XMLFormat = Format{100}
 	// Binary format version 1.0
-	CFPropertyListBinaryFormat_v1_0 = 200
+	BinaryFormat = Format{200}
 )
+
+func (f Format) String() string {
+	switch f.cfFormat {
+	case 1:
+		return "OpenStep format"
+	case 100:
+		return "XML format version 1.0"
+	case 200:
+		return "Binary format version 1.0"
+	}
+	return "Unknown format"
+}
 
 // TODO: CFPropertyListWrite() for stream-based writing
 // TODO: CFPropertyListCreateWithStream() for stream-based reading
 
 // CFPropertyListCreateWithData decodes the given data into a property list object.
-func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, err error) {
+func CFPropertyListCreateWithData(data []byte) (plist interface{}, format Format, err error) {
 	cfObj, format, err := cfPropertyListCreateWithData(data)
 	if err != nil {
-		return nil, 0, err
+		return nil, format, err
 	}
 	defer cfRelease(cfObj)
 	val, err := convertCFTypeToInterface(cfObj)
 	if err != nil {
-		return nil, 0, err
+		return nil, format, err
 	}
 	return val, format, nil
 }
 
-func cfPropertyListCreateWithData(data []byte) (cfObj cfTypeRef, format int, err error) {
+func cfPropertyListCreateWithData(data []byte) (cfObj cfTypeRef, format Format, err error) {
 	cfData := convertBytesToCFData(data)
 	defer C.CFRelease(C.CFTypeRef(cfData))
 	var cfFormat C.CFPropertyListFormat
@@ -58,16 +74,16 @@ func cfPropertyListCreateWithData(data []byte) (cfObj cfTypeRef, format int, err
 		// an error occurred
 		if cfError != nil {
 			defer cfRelease(cfTypeRef(cfError))
-			return nil, 0, NewCFError(cfError)
+			return nil, Format{cfFormat}, NewCFError(cfError)
 		}
-		return nil, 0, errors.New("plist: unknown error in CFPropertyListCreateWithData")
+		return nil, Format{}, errors.New("plist: unknown error in CFPropertyListCreateWithData")
 	}
-	return cfTypeRef(cfPlist), int(cfFormat), nil
+	return cfTypeRef(cfPlist), Format{cfFormat}, nil
 }
 
 // CFPropertyListCreateData returns a []byte containing a serialized representation
 // of a given property list in a specified format.
-func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error) {
+func CFPropertyListCreateData(plist interface{}, format Format) ([]byte, error) {
 	cfObj, err := convertValueToCFType(reflect.ValueOf(plist))
 	if err != nil {
 		return nil, err
@@ -76,9 +92,9 @@ func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error) {
 	return cfPropertyListCreateData(cfObj, format)
 }
 
-func cfPropertyListCreateData(plist cfTypeRef, format int) ([]byte, error) {
+func cfPropertyListCreateData(plist cfTypeRef, format Format) ([]byte, error) {
 	var cfError C.CFErrorRef
-	cfData := C.CFPropertyListCreateData(nil, C.CFPropertyListRef(plist), C.CFPropertyListFormat(format), 0, &cfError)
+	cfData := C.CFPropertyListCreateData(nil, C.CFPropertyListRef(plist), format.cfFormat, 0, &cfError)
 	if cfData == nil {
 		// an error occurred
 		if cfError != nil {

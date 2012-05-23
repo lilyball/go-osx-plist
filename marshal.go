@@ -83,7 +83,7 @@ import (
 // Property lists cannot represent cyclic data structures and Marshal does not
 // handle them. Passing cyclic structures to Marshal will result in an infinite
 // recursion.
-func Marshal(v interface{}, format int) ([]byte, error) {
+func Marshal(v interface{}, format Format) ([]byte, error) {
 	cfObj, err := marshalValue(reflect.ValueOf(v))
 	if err != nil {
 		return nil, err
@@ -320,10 +320,10 @@ func isValidName(name string) bool {
 // number overflows the target type, Unmarshal skips that field and completes
 // the unmarshalling as best it can. If no more serious errors are encountered,
 // Unmarshal returns an UnmarshalTypeError describing the earliest such error.
-func Unmarshal(data []byte, v interface{}) (format int, err error) {
+func Unmarshal(data []byte, v interface{}) (format Format, err error) {
 	cfObj, format, err := cfPropertyListCreateWithData(data)
 	if err != nil {
-		return 0, err
+		return format, err
 	}
 	defer cfRelease(cfObj)
 	rv := reflect.ValueOf(v)

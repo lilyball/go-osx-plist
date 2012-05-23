@@ -9,9 +9,9 @@ import (
 // These tests rely on the Arbitrary type from convert_test.go
 
 func TestArbitraryPlist(t *testing.T) {
-	for _, inFormat := range []int{CFPropertyListXMLFormat_v1_0, CFPropertyListBinaryFormat_v1_0} {
-		f := func(arb Arbitrary) (interface{}, int) { a, _ := standardize(arb.Value); return a, inFormat }
-		g := func(arb Arbitrary) (interface{}, int) {
+	for _, inFormat := range []Format{XMLFormat, BinaryFormat} {
+		f := func(arb Arbitrary) (interface{}, Format) { a, _ := standardize(arb.Value); return a, inFormat }
+		g := func(arb Arbitrary) (interface{}, Format) {
 			if data, err := CFPropertyListCreateData(arb.Value, inFormat); err != nil {
 				t.Error(err)
 			} else {
@@ -22,7 +22,7 @@ func TestArbitraryPlist(t *testing.T) {
 					return a, format
 				}
 			}
-			return nil, 0
+			return nil, Format{}
 		}
 		if err := quick.CheckEqual(f, g, nil); err != nil {
 			out1 := err.(*quick.CheckEqualError).Out1[0]

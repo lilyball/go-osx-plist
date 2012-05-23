@@ -37,7 +37,7 @@ func TestOmitEmpty(t *testing.T) {
 	o.Mr = map[string]interface{}{}
 	o.Mo = map[string]interface{}{}
 
-	data, err := Marshal(&o, CFPropertyListXMLFormat_v1_0)
+	data, err := Marshal(&o, XMLFormat)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ var unsupportedValues = []interface{}{
 
 func TestUnsupportedValues(t *testing.T) {
 	for _, v := range unsupportedValues {
-		if _, err := Marshal(v, CFPropertyListXMLFormat_v1_0); err != nil {
+		if _, err := Marshal(v, XMLFormat); err != nil {
 			if _, ok := err.(*UnsupportedValueError); !ok {
 				t.Errorf("for %v, got %T want UnsupportedValueError", v, err)
 			}
@@ -113,7 +113,7 @@ func TestRefValMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := Marshal(&s, CFPropertyListXMLFormat_v1_0)
+	b, err := Marshal(&s, XMLFormat)
 	if err != nil {
 		t.Fatal(err)
 	}

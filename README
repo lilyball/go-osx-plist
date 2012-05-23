@@ -19,30 +19,29 @@ package plist
     Note, a []byte (or []uint8) slice is always converted to a CFDataRef,
     but a slice of any other type is converted to a CFArrayRef
 
-CONSTANTS
+VARIABLES
 
-const (
+var (
     // OpenStep format (use of this format is discouraged)
-    CFPropertyListOpenStepFormat = 1
+    OpenStepFormat = Format{1}
     // XML format version 1.0
-    CFPropertyListXMLFormat_v1_0 = 100
+    XMLFormat = Format{100}
     // Binary format version 1.0
-    CFPropertyListBinaryFormat_v1_0 = 200
+    BinaryFormat = Format{200}
 )
-    CFPropertyListFormat
 
 
 FUNCTIONS
 
-func CFPropertyListCreateData(plist interface{}, format int) ([]byte, error)
+func CFPropertyListCreateData(plist interface{}, format Format) ([]byte, error)
     CFPropertyListCreateData returns a []byte containing a serialized
     representation of a given property list in a specified format.
 
-func CFPropertyListCreateWithData(data []byte) (plist interface{}, format int, err error)
+func CFPropertyListCreateWithData(data []byte) (plist interface{}, format Format, err error)
     CFPropertyListCreateWithData decodes the given data into a property list
     object.
 
-func Marshal(v interface{}, format int) ([]byte, error)
+func Marshal(v interface{}, format Format) ([]byte, error)
     Marshal returns the property list encoding of v.
 
     The Marshall interface is very heavily based off of
@@ -116,7 +115,26 @@ func Marshal(v interface{}, format int) ([]byte, error)
     not handle them. Passing cyclic structures to Marshal will result in an
     infinite recursion.
 
-func Unmarshal(data []byte, v interface{}) (format int, err error)
+
+TYPES
+
+type CFError struct {
+    Domain      string
+    Code        int
+    UserInfo    map[string]interface{}
+    Description string // comes from CFErrorCopyDescription()
+}
+
+func NewCFError(c C.CFErrorRef) *CFError
+
+func (e *CFError) Error() string
+
+type Format struct {
+    // contains filtered or unexported fields
+}
+    Format represents the format of the property list
+
+func Unmarshal(data []byte, v interface{}) (format Format, err error)
     Unmarshal parses the plist-encoded data and stores the result in the
     value pointed to by v.
 
@@ -147,19 +165,7 @@ func Unmarshal(data []byte, v interface{}) (format int, err error)
     are encountered, Unmarshal returns an UnmarshalTypeError describing the
     earliest such error.
 
-
-TYPES
-
-type CFError struct {
-    Domain      string
-    Code        int
-    UserInfo    map[string]interface{}
-    Description string // comes from CFErrorCopyDescription()
-}
-
-func NewCFError(c C.CFErrorRef) *CFError
-
-func (e *CFError) Error() string
+func (f Format) String() string
 
 type InvalidUnmarshalError struct {
     Type reflect.Type
