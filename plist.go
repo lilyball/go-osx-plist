@@ -107,6 +107,8 @@ func cfPropertyListCreateData(plist cfTypeRef, format Format) ([]byte, error) {
 	return convertCFDataToBytes(cfData), nil
 }
 
+// An UnsupportedTypeError is returned by Marshal when attempting to encode an
+// unsupported value type.
 type UnsupportedTypeError struct {
 	Type reflect.Type
 }
