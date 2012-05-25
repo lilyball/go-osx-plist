@@ -81,7 +81,7 @@ var unmarshalTests = []unmarshalTest{
 	{`{"M":{"T":false}}`, &umstruct, umstruct, nil},
 
 	// interface{} tests
-	{`{"a":3,"m":{"s":[3,5,"yes"],"n":2},"b":false}`, new(interface{}), map[string]interface{}{"a": 3, "m": map[string]interface{}{"s": []interface{}{3, 5, "yes"}, "n": 2}, "b": false}, nil},
+	{`{"a":3,"m":{"s":[3,5,"yes"],"n":2.4},"b":false}`, new(interface{}), map[string]interface{}{"a": 3, "m": map[string]interface{}{"s": []interface{}{3, 5, "yes"}, "n": 2.4}, "b": false}, nil},
 }
 
 func TestUnmarshal(t *testing.T) {
