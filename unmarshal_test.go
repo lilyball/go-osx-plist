@@ -79,6 +79,9 @@ var unmarshalTests = []unmarshalTest{
 	{`[{"T":false}]`, &umslice, umslice, nil},
 	{`[{"T":false}]`, &umslicep, &umslice, nil},
 	{`{"M":{"T":false}}`, &umstruct, umstruct, nil},
+
+	// interface{} tests
+	{`{"a":3,"m":{"s":[3,5,"yes"],"n":2},"b":false}`, new(interface{}), map[string]interface{}{"a": 3, "m": map[string]interface{}{"s": []interface{}{3, 5, "yes"}, "n": 2}, "b": false}, nil},
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -102,7 +105,14 @@ func TestUnmarshal(t *testing.T) {
 			t.Errorf("#%d: %v want %v", i, err, tt.err)
 			continue
 		}
-		if !reflect.DeepEqual(v.Elem().Interface(), tt.out) {
+		// call standardize for the interface{} test(s)
+		a := v.Elem().Interface()
+		b := tt.out
+		if v.Elem().Kind() == reflect.Interface {
+			a, _ = standardize(v.Elem().Interface())
+			b, _ = standardize(tt.out)
+		}
+		if !reflect.DeepEqual(a, b) {
 			t.Errorf("#%d: mismatch\nhave: %#+v\nwant: %#+v", i, v.Elem().Interface(), tt.out)
 			continue
 		}
