@@ -121,7 +121,6 @@ func TestUnmarshal(t *testing.T) {
 }
 
 func TestMarshalUnmarshalArbitrary(t *testing.T) {
-	// this uses Arbitrary from convert_test.go
 	f := func(arb Arbitrary) interface{} { a, _ := standardize(arb.Value); return a }
 	g := func(arb Arbitrary) interface{} {
 		data, err := Marshal(arb.Value, XMLFormat)
