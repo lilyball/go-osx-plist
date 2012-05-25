@@ -13,6 +13,32 @@ import (
 	"unicode"
 )
 
+// Format represents the format of the property list
+type Format struct {
+	cfFormat C.CFPropertyListFormat // don't export this, we want control over all valid values
+}
+
+var (
+	// OpenStep format (use of this format is discouraged)
+	OpenStepFormat = Format{1}
+	// XML format version 1.0
+	XMLFormat = Format{100}
+	// Binary format version 1.0
+	BinaryFormat = Format{200}
+)
+
+func (f Format) String() string {
+	switch f.cfFormat {
+	case 1:
+		return "OpenStep format"
+	case 100:
+		return "XML format version 1.0"
+	case 200:
+		return "Binary format version 1.0"
+	}
+	return "Unknown format"
+}
+
 // Marshal returns the property list encoding of v.
 //
 // The Marshall interface is very heavily based off of encoding/json.Marshal.

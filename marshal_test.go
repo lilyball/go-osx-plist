@@ -41,8 +41,8 @@ func TestOmitEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TODO: replace with Unmarshal()
-	got, _, err := CFPropertyListCreateWithData(data)
+	var got interface{}
+	_, err = Unmarshal(data, &got)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,8 +117,8 @@ func TestRefValMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TODO: replace with Unmarshal
-	got, _, err := CFPropertyListCreateWithData(b)
+	var got interface{}
+	_, err = Unmarshal(b, &got)
 	if err != nil {
 		t.Fatal(err)
 	}
