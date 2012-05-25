@@ -487,6 +487,7 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 			return nil
 		}
 		vSetter.Set(reflect.ValueOf(convertCFDateToTime(C.CFDateRef(cfObj))))
+		return nil
 	case cfDictionaryTypeID:
 		if vType.Kind() == reflect.Map {
 			// it's a map. Check its key type first
