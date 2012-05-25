@@ -402,7 +402,7 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 	var unmarshaler Unmarshaler
 	if u, ok := v.Interface().(Unmarshaler); ok {
 		unmarshaler = u
-	} else if v.Kind() != reflect.Ptr && vType.Name() != "" && v.CanAddr() {
+	} else if vType.Kind() != reflect.Ptr && vType.Name() != "" && v.CanAddr() {
 		// matching the encoding/json behavior here
 		// If v is a named type and is addressable, check its address for Unmarshaler.
 		vA := v.Addr()
@@ -416,20 +416,22 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 		if err != nil {
 			return err
 		}
-		if v.Kind() == reflect.Ptr && v.IsNil() {
+		if vType.Kind() == reflect.Ptr && v.IsNil() {
 			v.Set(reflect.New(vType.Elem()))
 			unmarshaler = v.Interface().(Unmarshaler)
 		}
 		return unmarshaler.UnmarshalPlist(plist)
 	}
-	if v.Kind() == reflect.Ptr {
+	if vType.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			v.Set(reflect.New(vType.Elem()))
 		}
 		return state.unmarshalValue(cfObj, v.Elem())
 	}
 	typeID := C.CFGetTypeID(C.CFTypeRef(cfObj))
-	if v.Kind() == reflect.Interface {
+	vSetter := v      // receiver of any Set* calls
+	vAddr := v.Addr() // used for re-setting v for maps/slices
+	if vType.Kind() == reflect.Interface {
 		if v.IsNil() {
 			// pick an appropriate type based on the cfobj
 			typ, ok := cfTypeMap[typeID]
@@ -441,20 +443,23 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 				state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
 				return nil
 			}
-			v.Set(reflect.Zero(typ))
+			vSetter.Set(reflect.Zero(typ))
 		}
-		return state.unmarshalValue(cfObj, v.Elem())
+		vAddr = v
+		v = v.Elem()
+		vType = v.Type()
 	}
 	switch typeID {
 	case cfArrayTypeID:
-		if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+		if vType.Kind() != reflect.Slice && vType.Kind() != reflect.Array {
 			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
 			return nil
 		}
 		return convertCFArrayToSliceHelper(C.CFArrayRef(cfObj), func(elem cfTypeRef, idx, count int) (bool, error) {
-			if idx == 0 && v.Kind() == reflect.Slice {
-				v.Set(reflect.MakeSlice(vType, count, count))
-			} else if v.Kind() == reflect.Array && idx >= v.Len() {
+			if idx == 0 && vType.Kind() == reflect.Slice {
+				vSetter.Set(reflect.MakeSlice(vType, count, count))
+				v = vAddr.Elem()
+			} else if vType.Kind() == reflect.Array && idx >= v.Len() {
 				return false, nil
 			}
 			if err := state.unmarshalValue(elem, v.Index(idx)); err != nil {
@@ -463,48 +468,46 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 			return true, nil
 		})
 	case cfBooleanTypeID:
-		if v.Kind() != reflect.Bool {
+		if vType.Kind() != reflect.Bool {
 			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
 			return nil
 		}
-		v.SetBool(C.CFBooleanGetValue(C.CFBooleanRef(cfObj)) != C.false)
+		vSetter.Set(reflect.ValueOf(C.CFBooleanGetValue(C.CFBooleanRef(cfObj)) != C.false))
 		return nil
 	case cfDataTypeID:
 		if !byteSliceType.AssignableTo(vType) {
 			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
 			return nil
 		}
-		v.SetBytes(convertCFDataToBytes(C.CFDataRef(cfObj)))
+		vSetter.Set(reflect.ValueOf(convertCFDataToBytes(C.CFDataRef(cfObj))))
 		return nil
 	case cfDateTypeID:
 		if !timeType.AssignableTo(vType) {
 			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
 			return nil
 		}
-		v.Set(reflect.ValueOf(convertCFDateToTime(C.CFDateRef(cfObj))))
+		vSetter.Set(reflect.ValueOf(convertCFDateToTime(C.CFDateRef(cfObj))))
 	case cfDictionaryTypeID:
-		if v.Kind() == reflect.Map {
+		if vType.Kind() == reflect.Map {
 			// it's a map. Check its key type first
 			if !stringType.AssignableTo(vType.Key()) {
 				state.recordError(&UnmarshalTypeError{cfTypeNames[cfStringTypeID], vType.Key()})
 				return nil
 			}
 			if v.IsNil() {
-				v.Set(reflect.MakeMap(vType))
+				vSetter.Set(reflect.MakeMap(vType))
+				v = vAddr.Elem()
 			}
 			return convertCFDictionaryToMapHelper(C.CFDictionaryRef(cfObj), func(key string, value cfTypeRef, count int) error {
 				keyVal := reflect.ValueOf(key)
-				val := v.MapIndex(keyVal)
-				if !val.IsValid() {
-					val = reflect.New(vType.Elem())
-					v.SetMapIndex(keyVal, val)
-				}
+				val := reflect.New(vType.Elem())
 				if err := state.unmarshalValue(value, val); err != nil {
 					return err
 				}
+				v.SetMapIndex(keyVal, val.Elem())
 				return nil
 			})
-		} else if v.Kind() == reflect.Struct {
+		} else if vType.Kind() == reflect.Struct {
 			return convertCFDictionaryToMapHelper(C.CFDictionaryRef(cfObj), func(key string, value cfTypeRef, count int) error {
 				// we need to iterate the fields because the tag might rename the key
 				var f reflect.StructField
@@ -553,14 +556,18 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 		state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
 		return nil
 	case cfNumberTypeID:
-		switch v.Kind() {
+		switch vType.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			i := convertCFNumberToInt64(C.CFNumberRef(cfObj))
 			if v.OverflowInt(i) {
 				state.recordError(&UnmarshalTypeError{cfTypeNames[typeID] + " " + strconv.FormatInt(i, 10), vType})
 				return nil
 			}
-			v.SetInt(i)
+			if vSetter.Kind() == reflect.Interface {
+				vSetter.Set(reflect.ValueOf(i))
+			} else {
+				vSetter.SetInt(i)
+			}
 			return nil
 		case reflect.Uint, reflect.Uintptr, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			u := uint64(convertCFNumberToUInt32(C.CFNumberRef(cfObj)))
@@ -568,7 +575,11 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 				state.recordError(&UnmarshalTypeError{cfTypeNames[typeID] + " " + strconv.FormatUint(u, 10), vType})
 				return nil
 			}
-			v.SetUint(u)
+			if vSetter.Kind() == reflect.Interface {
+				vSetter.Set(reflect.ValueOf(u))
+			} else {
+				vSetter.SetUint(u)
+			}
 			return nil
 		case reflect.Float32, reflect.Float64:
 			f := convertCFNumberToFloat64(C.CFNumberRef(cfObj))
@@ -576,17 +587,21 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 				state.recordError(&UnmarshalTypeError{cfTypeNames[typeID] + " " + strconv.FormatFloat(f, 'f', -1, 64), vType})
 				return nil
 			}
-			v.SetFloat(f)
+			if vSetter.Kind() == reflect.Interface {
+				vSetter.Set(reflect.ValueOf(f))
+			} else {
+				vSetter.SetFloat(f)
+			}
 			return nil
 		}
 		state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
 		return nil
 	case cfStringTypeID:
-		if v.Kind() != reflect.String {
+		if vType.Kind() != reflect.String {
 			state.recordError(&UnmarshalTypeError{cfTypeNames[typeID], vType})
 			return nil
 		}
-		v.SetString(convertCFStringToString(C.CFStringRef(cfObj)))
+		vSetter.Set(reflect.ValueOf(convertCFStringToString(C.CFStringRef(cfObj))))
 		return nil
 	}
 	return &UnknownCFTypeError{typeID}
