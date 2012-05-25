@@ -29,7 +29,10 @@ type UnknownCFTypeError struct {
 }
 
 func (e *UnknownCFTypeError) Error() string {
-	return "plist: unknown CFTypeID " + strconv.Itoa(int(e.CFTypeID))
+	cfStr := C.CFCopyTypeIDDescription(e.CFTypeID)
+	str := convertCFStringToString(cfStr)
+	cfRelease(cfTypeRef(cfStr))
+	return "plist: unknown CFTypeID " + strconv.Itoa(int(e.CFTypeID)) + " (" + str + ")"
 }
 
 // UnsupportedKeyTypeError represents the case where a CFDictionary is being converted
