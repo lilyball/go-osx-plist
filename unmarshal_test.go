@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"testing/quick"
 )
 
 // The tests here are based off of the ones in encoding/json
@@ -116,5 +117,35 @@ func TestUnmarshal(t *testing.T) {
 			t.Errorf("#%d: mismatch\nhave: %#+v\nwant: %#+v", i, v.Elem().Interface(), tt.out)
 			continue
 		}
+	}
+}
+
+func TestMarshalUnmarshalArbitrary(t *testing.T) {
+	// this uses Arbitrary from convert_test.go
+	f := func(arb Arbitrary) interface{} { a, _ := standardize(arb.Value); return a }
+	g := func(arb Arbitrary) interface{} {
+		data, err := Marshal(arb.Value, XMLFormat)
+		if err != nil {
+			t.Error(err)
+			return nil
+		}
+		var result interface{}
+		format, err := Unmarshal(data, &result)
+		if err != nil {
+			t.Error(err)
+			return nil
+		}
+		if format != XMLFormat {
+			t.Error(err)
+			return nil
+		}
+		a, _ := standardize(result)
+		return a
+	}
+	if err := quick.CheckEqual(f, g, nil); err != nil {
+		out1 := err.(*quick.CheckEqualError).Out1[0]
+		out2 := err.(*quick.CheckEqualError).Out2[0]
+		findDifferences(t, out1, out2)
+		t.Error(err)
 	}
 }
