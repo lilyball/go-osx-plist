@@ -383,7 +383,6 @@ var cfTypeMap = map[C.CFTypeID]reflect.Type{
 	cfDataTypeID:       reflect.TypeOf([]byte(nil)),
 	cfDateTypeID:       reflect.TypeOf(time.Time{}),
 	cfDictionaryTypeID: reflect.TypeOf(map[string]interface{}(nil)),
-	cfNumberTypeID:     reflect.TypeOf(int64(0)),
 	cfStringTypeID:     reflect.TypeOf(""),
 }
 
@@ -395,6 +394,25 @@ var cfTypeNames = map[C.CFTypeID]string{
 	cfDictionaryTypeID: "CFDictionary",
 	cfNumberTypeID:     "CFNumber",
 	cfStringTypeID:     "CFString",
+}
+
+func cfNumberTypeToType(t C.CFNumberType) reflect.Type {
+	switch t {
+	case C.kCFNumberSInt8Type, C.kCFNumberCharType:
+		return reflect.TypeOf(int8(0))
+	case C.kCFNumberSInt16Type, C.kCFNumberShortType:
+		return reflect.TypeOf(int16(0))
+	case C.kCFNumberSInt32Type, C.kCFNumberIntType:
+		return reflect.TypeOf(int32(0))
+	case C.kCFNumberSInt64Type, C.kCFNumberLongType, C.kCFNumberLongLongType, C.kCFNumberCFIndexType, C.kCFNumberNSIntegerType:
+		return reflect.TypeOf(int64(0))
+	case C.kCFNumberFloat32Type, C.kCFNumberFloatType:
+		return reflect.TypeOf(float32(0))
+	case C.kCFNumberFloat64Type, C.kCFNumberDoubleType, C.kCFNumberCGFloatType:
+		return reflect.TypeOf(float64(0))
+	}
+	// all cases should be covered, but we have to return something by default
+	return reflect.TypeOf(int64(0))
 }
 
 func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) error {
@@ -434,9 +452,15 @@ func (state *unmarshalState) unmarshalValue(cfObj cfTypeRef, v reflect.Value) er
 	if vType.Kind() == reflect.Interface {
 		if v.IsNil() {
 			// pick an appropriate type based on the cfobj
-			typ, ok := cfTypeMap[typeID]
-			if !ok {
-				return &UnknownCFTypeError{typeID}
+			var typ reflect.Type
+			if typeID == cfNumberTypeID {
+				typ = cfNumberTypeToType(C.CFNumberGetType(C.CFNumberRef(cfObj)))
+			} else {
+				var ok bool
+				typ, ok = cfTypeMap[typeID]
+				if !ok {
+					return &UnknownCFTypeError{typeID}
+				}
 			}
 			if !typ.AssignableTo(vType) {
 				// v must be some interface that our object doesn't conform to
