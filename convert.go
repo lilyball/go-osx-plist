@@ -192,13 +192,13 @@ func convertTimeToCFDate(t time.Time) C.CFDateRef {
 	// truncate to milliseconds, to get a more predictable conversion
 	ms := int64(time.Duration(t.UnixNano()) / time.Millisecond * time.Millisecond)
 	nano := C.double(ms) / C.double(time.Second)
-	nano -= C.kCFAbsoluteTimeIntervalSince1970
+	nano -= C.double(C.kCFAbsoluteTimeIntervalSince1970)
 	return C.CFDateCreate(nil, C.CFAbsoluteTime(nano))
 }
 
 func convertCFDateToTime(cfDate C.CFDateRef) time.Time {
 	nano := C.double(C.CFDateGetAbsoluteTime(cfDate))
-	nano += C.kCFAbsoluteTimeIntervalSince1970
+	nano += C.double(C.kCFAbsoluteTimeIntervalSince1970)
 	// pull out milliseconds, to get a more predictable conversion
 	ms := int64(float64(C.round(nano * 1000)))
 	sec := ms / 1000
