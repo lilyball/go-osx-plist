@@ -154,11 +154,7 @@ func convertStringToCFString(str string) C.CFStringRef {
 var runeErrorLen = utf8.RuneLen(utf8.RuneError)
 
 func convertCFStringToString(cfStr C.CFStringRef) string {
-	cstrPtr := C.CFStringGetCStringPtr(cfStr, C.kCFStringEncodingUTF8)
-	if cstrPtr != nil {
-		return C.GoString(cstrPtr)
-	}
-	// quick path doesn't work, so copy the bytes out to a buffer
+	// NB: don't use CFStringGetCStringPtr() because it will stop at the first NUL
 	length := C.CFStringGetLength(cfStr)
 	if length == 0 {
 		// short-cut for empty strings
