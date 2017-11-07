@@ -63,7 +63,7 @@ type CFError struct {
 
 func NewCFError(c C.CFErrorRef) *CFError {
 	e := &CFError{
-		Domain: convertCFStringToString(C.CFErrorGetDomain(c)),
+		Domain: convertCFStringToString(C.CFStringRef(C.CFErrorGetDomain(c))),
 		Code:   int(C.CFErrorGetCode(c)),
 	}
 	cfDict := C.CFErrorCopyUserInfo(c)
